@@ -162,21 +162,35 @@ namespace Sockets
             var head = new StringBuilder();
             var body = Array.Empty<byte>();
 
-            if (request.RequestUri is "/" or "/hello.html")
+            switch (request.RequestUri)
             {
-                body = File.ReadAllBytes("hello.html");
-                head.Append("HTTP/1.1 200 OK\r\n")
-                    .Append($"Content-Length:{body.Length}\r\n")
-                    .Append("Content-Type: text/html; charset=utf-8\r\n");
+                case "/":
+                case "/hello.html":
+                {
+                    body = File.ReadAllBytes("hello.html");
+                    head.Append("HTTP/1.1 200 OK\r\n")
+                        .Append($"Content-Length:{body.Length}\r\n")
+                        .Append("Content-Type: text/html; charset=utf-8\r\n");
+                    break;
+                }
+                case "/groot.gif":
+                {
+                    body = File.ReadAllBytes("groot.gif");
+                    head.Append("HTTP/1.1 200 OK\r\n")
+                        .Append($"Content-Length:{body.Length}\r\n")
+                        .Append("Content-Type: image/gif;\r\n");
+                    break;
+                }
+                default:
+                {
+                    head.Append("HTTP/1.1 404 Not Found\r\n")
+                        .Append("Content-Length:0\r\n");
+                    break;
+                }
             }
-            else
-            {
-                head.Append("HTTP/1.1 404 Not Found\r\n")
-                    .Append("Content-Length:0\r\n");
-            }
-            
+
             head.Append("\r\n");
-            
+
             return CreateResponseBytes(head, body);
         }
 
