@@ -162,11 +162,28 @@ namespace Sockets
             var head = new StringBuilder();
             var body = Array.Empty<byte>();
 
-            switch (request.RequestUri)
+            var tokens = request.RequestUri.Split("?");
+            var host = tokens[0];
+            var parameters = tokens.Length > 1 ? tokens[1] : string.Empty;
+
+            var collection = HttpUtility.ParseQueryString(parameters);
+
+            switch (host)
             {
                 case "/":
                 case "/hello.html":
+
                     body = File.ReadAllBytes("hello.html");
+                    var template = Encoding.UTF8
+                        .GetString(body);
+
+                    if (collection["name"] is not null)
+                        template = template.Replace("{{Hello}}", collection["name"]);
+
+                    if (collection["greeting"] is not null)
+                        template = template.Replace("{{World}}", collection["greeting"]);
+
+                    body = Encoding.UTF8.GetBytes(template);
                     head.Append("HTTP/1.1 200 OK\r\n")
                         .Append($"Content-Length:{body.Length}\r\n")
                         .Append("Content-Type: text/html; charset=utf-8\r\n");
@@ -179,7 +196,7 @@ namespace Sockets
                     break;
                 case "/time.html":
                     body = File.ReadAllBytes("time.template.html");
-                    var template = Encoding.UTF8
+                    template = Encoding.UTF8
                         .GetString(body)
                         .Replace("{{ServerTime}}",DateTime.Now.ToString(CultureInfo.InvariantCulture));
                     
