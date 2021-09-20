@@ -168,13 +168,11 @@ namespace Sockets
                     body = File.ReadAllBytes("hello.html");
                     head = new StringBuilder("HTTP/1.1 200 OK\r\n");
                     head.Append("Content-Type: text/html; charset=utf-8\r\n");
-                    head.Append("Content-Length: "+body.Length.ToString());
                     break;
                 case "/groot.gif":
                     body = File.ReadAllBytes("groot.gif");
                     head = new StringBuilder("HTTP/1.1 200 OK\r\n");
                     head.Append("Content-Type: image/gif\r\n");
-                    head.Append("Content-Length: "+body.Length.ToString());
                     break;
                 case "/time.html":
                     body = File.ReadAllBytes("time.template.html");
@@ -183,7 +181,6 @@ namespace Sockets
                     body = Encoding.UTF8.GetBytes(bodyString);
                     head = new StringBuilder("HTTP/1.1 200 OK\r\n");
                     head.Append("Content-Type: text/html; charset=utf-8\r\n");
-                    head.Append("Content-Length: "+body.Length.ToString());
                     break;
                 default:
                     head = new StringBuilder("HTTP/1.1 404 Not Found");
@@ -196,6 +193,7 @@ namespace Sockets
         // Собирает ответ в виде массива байт из байтов строки head и байтов body.
         private static byte[] CreateResponseBytes(StringBuilder head, byte[] body)
         {
+            head.Append("Content-Length: "+body.Length.ToString());
             byte[] headBytes = Encoding.ASCII.GetBytes(head.ToString()+"\r\n\r\n");
             byte[] responseBytes = new byte[headBytes.Length + body.Length];
             Array.Copy(headBytes, responseBytes, headBytes.Length);
