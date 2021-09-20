@@ -167,21 +167,43 @@ namespace Sockets
             var parameters = tokens.Length > 1 ? tokens[1] : string.Empty;
 
             var collection = HttpUtility.ParseQueryString(parameters);
-
+            
+            var cookie = request.Headers.FirstOrDefault(h => h.Name == "Cookie");
+            var param = cookie is null
+                ? new Dictionary<string, string>()
+                : cookie.Value.Split("; ")
+                    .Select(e => e.Split('='))
+                    .ToDictionary(e => e[0], e => e[1]);
+            
             switch (host)
             {
                 case "/":
                 case "/hello.html":
                     body = File.ReadAllBytes("hello.html");
+
+                    var name = collection["name"];
+                    var greeting = collection["greeting"];
+
                     var template = Encoding.UTF8
                         .GetString(body)
-                        .ReplaceIfNotNull(HttpUtility.HtmlEncode(collection["name"]), "{{Hello}}")
-                        .ReplaceIfNotNull(HttpUtility.HtmlEncode(collection["greeting"]), "{{World}}");
-
+                        .ReplaceIfNotNull(HttpUtility.HtmlEncode(greeting), "{{Hello}}")
+                        .ReplaceIfNotNull(HttpUtility.HtmlEncode(name), "{{World}}");
+                    
+                    if (name is null && param.TryGetValue("name", out var value))
+                    {
+                        template = template.Replace("{{World}}", HttpUtility.HtmlEncode(HttpUtility.UrlDecode(value)));
+                    }
+                    if (greeting is null && param.TryGetValue("greeting", out value))
+                    {
+                        template = template.Replace("{{Hello}}", HttpUtility.HtmlEncode(HttpUtility.UrlDecode(value)));
+                    }
+                    
                     body = Encoding.UTF8.GetBytes(template);
                     head.Append("HTTP/1.1 200 OK\r\n")
                         .Append($"Content-Length:{body.Length}\r\n")
-                        .Append("Content-Type: text/html; charset=utf-8\r\n");
+                        .Append("Content-Type: text/html; charset=utf-8\r\n")
+                        .AppendIfNot(name == null, $"Set-Cookie: name={HttpUtility.UrlEncode(name)}\r\n")
+                        .AppendIfNot(greeting == null, $"Set-Cookie: greeting={HttpUtility.UrlEncode(greeting)}\r\n");
                     break;
                 case "/groot.gif":
                     body = File.ReadAllBytes("groot.gif");
@@ -259,5 +281,8 @@ namespace Sockets
     {
         public static string ReplaceIfNotNull(this string baseString, string value, string stringToReplace)
             => value == null ? baseString : baseString.Replace(stringToReplace, value);
+
+        public static StringBuilder AppendIfNot(this StringBuilder builder, bool predicate, string value)
+            => predicate ? builder : builder.Append(value);
     }
 }
