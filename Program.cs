@@ -160,8 +160,8 @@ namespace Sockets
         private static byte[] ProcessRequest(Request request)
         {
             // TODO
-            var head = new StringBuilder("OK");
-            var body = new byte[0];
+            var head = new StringBuilder("HTTP/1.1 404 Not Found");
+            var body = Encoding.ASCII.GetBytes("\r\n");
             return CreateResponseBytes(head, body);
         }
 
