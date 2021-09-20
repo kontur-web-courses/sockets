@@ -168,6 +168,13 @@ namespace Sockets
                 head.Append("Content-Type: text/html; charset=utf-8\r\n");
                 head.Append("Content-Length: "+body.Length.ToString());
             }
+            else if (request.RequestUri == "/groot.gif")
+            {
+                body = File.ReadAllBytes("groot.gif");
+                head = new StringBuilder("HTTP/1.1 200 OK\r\n");
+                head.Append("Content-Type: image/gif\r\n");
+                head.Append("Content-Length: "+body.Length.ToString());
+            }
             else
             {
                 head = new StringBuilder("HTTP/1.1 404 Not Found");
