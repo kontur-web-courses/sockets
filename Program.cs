@@ -172,21 +172,48 @@ namespace Sockets
             {
                 case "/":
                 case "/hello.html":
+                    head = new StringBuilder("HTTP/1.1 200 OK\r\n"); 
+                    head.Append("Content-Type: text/html; charset=utf-8\r\n");
                     body = File.ReadAllBytes("hello.html");
                     if (parameters != null)
                     {
                         bodyString = Encoding.UTF8.GetString(body);
                         paramCollection = HttpUtility.ParseQueryString(parameters);
                         if (paramCollection["name"] != null)
-                            bodyString = bodyString.Replace("{{World}}", 
-                                HttpUtility.HtmlEncode(paramCollection["name"]));
+                        {
+                            var name = paramCollection["name"];
+                            bodyString = bodyString.Replace("{{World}}", HttpUtility.HtmlEncode(name));
+                            
+                            head.Append($"Set-Cookie: name={HttpUtility.UrlEncode(name)}\r\n");
+                        }
                         if (paramCollection["greeting"] != null)
                             bodyString = bodyString.Replace("{{Hello}}", 
                                 HttpUtility.HtmlEncode(paramCollection["greeting"]));
                         body = Encoding.UTF8.GetBytes(bodyString);
                     }
-                    head = new StringBuilder("HTTP/1.1 200 OK\r\n");
-                    head.Append("Content-Type: text/html; charset=utf-8\r\n");
+
+                    if (parameters == null || paramCollection["name"] == null)
+                    {
+                        var cookieHeader = request.Headers.FirstOrDefault(h => h.Name == "Cookie");
+                        if (cookieHeader != null)
+                        {
+                            var cookieString = cookieHeader.Value;
+                            foreach (var cookie in cookieString.Split(';'))
+                            {
+                                var tmp1 = cookie.Split('=');
+                                var name = tmp1[0];
+                                var val = HttpUtility.UrlDecode(tmp1[1]);
+                                if (name == "name")
+                                {
+                                    val = HttpUtility.HtmlEncode(val);
+                                    bodyString = Encoding.UTF8.GetString(body);
+                                    bodyString = bodyString.Replace("{{World}}", val);
+                                    body = Encoding.UTF8.GetBytes(bodyString);
+                                }
+                            }
+                        }
+                    }
+                    
                     break;
                 case "/groot.gif":
                     body = File.ReadAllBytes("groot.gif");
