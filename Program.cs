@@ -178,10 +178,10 @@ namespace Sockets
                         .GetString(body);
 
                     if (collection["name"] is not null)
-                        template = template.Replace("{{Hello}}", collection["name"]);
+                        template = template.Replace("{{Hello}}", HttpUtility.HtmlEncode(collection["name"]));
 
                     if (collection["greeting"] is not null)
-                        template = template.Replace("{{World}}", collection["greeting"]);
+                        template = template.Replace("{{World}}", HttpUtility.HtmlEncode(collection["greeting"]));
 
                     body = Encoding.UTF8.GetBytes(template);
                     head.Append("HTTP/1.1 200 OK\r\n")
