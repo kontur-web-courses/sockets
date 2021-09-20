@@ -160,30 +160,28 @@ namespace Sockets
         private static byte[] ProcessRequest(Request request)
         {
             // TODO
-            string status;
+            var status = "HTTP/1.1 200 OK\r\n";
             var headers = "";
             var body = new byte[0];
             switch (request.RequestUri)
             {
                 case "/hello.html":
-                {
                     body = File.ReadAllBytes("hello.html");
-                    status = "HTTP/1.1 200 OK\r\n";
                     headers = $"Content-Type: text/html; charset=utf-8\r\nContent-Length: {body.Length}";
                     break;
-                }
                 case "/groot.gif":
-                {
                     body = File.ReadAllBytes("groot.gif");
-                    status = "HTTP/1.1 200 OK\r\n";
                     headers = $"Content-Type: image/gif\r\nContent-Length: {body.Length}";
                     break;
-                }
+                case "/time.html":
+                    var template = Encoding.UTF8.GetString(File.ReadAllBytes("time.template.html"));
+                    var bodystr = template.Replace("{{ServerTime}}", DateTime.Now.ToString());
+                    body = Encoding.UTF8.GetBytes(bodystr);
+                    headers = $"Content-Type: text/html; charset=utf-8\r\nContent-Length: {body.Length}";
+                    break;
                 default:
-                {
                     status = "HTTP/1.1 404 Not Found\r\n";
                     break;
-                }
             }
             var head = new StringBuilder($"{status}{headers}");
             return CreateResponseBytes(head, body);
