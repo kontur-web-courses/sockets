@@ -160,34 +160,51 @@ namespace Sockets
 
         private static byte[] ProcessRequest(Request request)
         {
-            // TODO
             var status = "HTTP/1.1 200 OK\r\n";
             var headers = "";
             var body = new byte[0];
             var reqesrtUri = request.RequestUri.Split('?');
             var uri = reqesrtUri[0];
             var query = (reqesrtUri.Length > 1) ?  HttpUtility.ParseQueryString(reqesrtUri[1]) : new NameValueCollection();
+            var cookie = request.Headers
+                .FirstOrDefault(header => header.Name == "Cookie")
+                ?.Value
+                ?.Split(";")
+                ?.ToDictionary(x => x.Split('=')[0], x=> x.Split('=')[1]);
+            if (cookie == null)
+                cookie = new Dictionary<string, string>();
             switch (uri)
             {
                 case "/hello.html":
                     var helloTemplate  = Encoding.UTF8.GetString(File.ReadAllBytes("hello.html"));
                     if (query["name"] != null)
-                        helloTemplate = helloTemplate.Replace("{{World}}", HttpUtility.HtmlEncode(query["name"]));
+                    {
+                        var name = query["name"];
+                        helloTemplate = helloTemplate.Replace("{{World}}", HttpUtility.HtmlEncode(name));
+                        headers += $"Set-Cookie: name={HttpUtility.UrlEncode(name)}\r\n";
+                    }
+                    else if (cookie.ContainsKey("name"))
+                        helloTemplate = helloTemplate.Replace("{{World}}", HttpUtility.HtmlEncode(HttpUtility.UrlDecode(cookie["name"])));
+
                     if (query["greeting"] != null)
                         helloTemplate = helloTemplate.Replace("{{Hello}}", HttpUtility.HtmlEncode(query["greeting"]));
+
                     body = Encoding.UTF8.GetBytes(helloTemplate);
-                    headers = $"Content-Type: text/html; charset=utf-8\r\nContent-Length: {body.Length}";
+                    headers += $"Content-Type: text/html; charset=utf-8\r\nContent-Length: {body.Length}";
                     break;
+
                 case "/groot.gif":
                     body = File.ReadAllBytes("groot.gif");
                     headers = $"Content-Type: image/gif\r\nContent-Length: {body.Length}";
                     break;
+
                 case "/time.html":
                     var timeTemplate = Encoding.UTF8.GetString(File.ReadAllBytes("time.template.html"));
                     timeTemplate = timeTemplate.Replace("{{ServerTime}}", DateTime.Now.ToString());
                     body = Encoding.UTF8.GetBytes(timeTemplate);
                     headers = $"Content-Type: text/html; charset=utf-8\r\nContent-Length: {body.Length}";
                     break;
+
                 default:
                     status = "HTTP/1.1 404 Not Found\r\n";
                     break;
