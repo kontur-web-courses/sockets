@@ -178,9 +178,11 @@ namespace Sockets
                         bodyString = Encoding.UTF8.GetString(body);
                         paramCollection = HttpUtility.ParseQueryString(parameters);
                         if (paramCollection["name"] != null)
-                            bodyString = bodyString.Replace("{{World}}", paramCollection["name"]);
+                            bodyString = bodyString.Replace("{{World}}", 
+                                HttpUtility.HtmlEncode(paramCollection["name"]));
                         if (paramCollection["greeting"] != null)
-                            bodyString = bodyString.Replace("{{Hello}}", paramCollection["greeting"]);
+                            bodyString = bodyString.Replace("{{Hello}}", 
+                                HttpUtility.HtmlEncode(paramCollection["greeting"]));
                         body = Encoding.UTF8.GetBytes(bodyString);
                     }
                     head = new StringBuilder("HTTP/1.1 200 OK\r\n");
