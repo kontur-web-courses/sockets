@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Reflection.Metadata.Ecma335;
 using System.Text;
 using System.Threading;
 using System.Web;
@@ -163,10 +164,18 @@ namespace Sockets
             var status = "HTTP/1.1 200 OK\r\n";
             var headers = "";
             var body = new byte[0];
-            switch (request.RequestUri)
+            var reqesrtUri = request.RequestUri.Split('?');
+            var uri = reqesrtUri[0];
+            var query = (reqesrtUri.Length > 1) ?  HttpUtility.ParseQueryString(reqesrtUri[1]) : new NameValueCollection();
+            switch (uri)
             {
                 case "/hello.html":
-                    body = File.ReadAllBytes("hello.html");
+                    var helloTemplate  = Encoding.UTF8.GetString(File.ReadAllBytes("hello.html"));
+                    if (query["name"] != null)
+                        helloTemplate = helloTemplate.Replace("{{World}}", query["name"]);
+                    if (query["greeting"] != null)
+                        helloTemplate = helloTemplate.Replace("{{Hello}}", query["greeting"]);
+                    body = Encoding.UTF8.GetBytes(helloTemplate);
                     headers = $"Content-Type: text/html; charset=utf-8\r\nContent-Length: {body.Length}";
                     break;
                 case "/groot.gif":
@@ -174,9 +183,9 @@ namespace Sockets
                     headers = $"Content-Type: image/gif\r\nContent-Length: {body.Length}";
                     break;
                 case "/time.html":
-                    var template = Encoding.UTF8.GetString(File.ReadAllBytes("time.template.html"));
-                    var bodystr = template.Replace("{{ServerTime}}", DateTime.Now.ToString());
-                    body = Encoding.UTF8.GetBytes(bodystr);
+                    var timeTemplate = Encoding.UTF8.GetString(File.ReadAllBytes("time.template.html"));
+                    timeTemplate = timeTemplate.Replace("{{ServerTime}}", DateTime.Now.ToString());
+                    body = Encoding.UTF8.GetBytes(timeTemplate);
                     headers = $"Content-Type: text/html; charset=utf-8\r\nContent-Length: {body.Length}";
                     break;
                 default:
