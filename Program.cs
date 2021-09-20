@@ -159,9 +159,77 @@ namespace Sockets
 
         private static byte[] ProcessRequest(Request request)
         {
-            // TODO
-            var head = new StringBuilder("OK");
-            var body = new byte[0];
+            var head = new StringBuilder();
+            var body = Array.Empty<byte>();
+
+            var tokens = request.RequestUri.Split("?");
+            var host = tokens[0];
+            var parameters = tokens.Length > 1 ? tokens[1] : string.Empty;
+
+            var collection = HttpUtility.ParseQueryString(parameters);
+            
+            var cookie = request.Headers.FirstOrDefault(h => h.Name == "Cookie");
+            var param = cookie is null
+                ? new Dictionary<string, string>()
+                : cookie.Value.Split("; ")
+                    .Select(e => e.Split('='))
+                    .ToDictionary(e => e[0], e => e[1]);
+            
+            switch (host)
+            {
+                case "/":
+                case "/hello.html":
+                    body = File.ReadAllBytes("hello.html");
+
+                    var name = collection["name"];
+                    var greeting = collection["greeting"];
+
+                    var template = Encoding.UTF8
+                        .GetString(body)
+                        .ReplaceIfNotNull(HttpUtility.HtmlEncode(greeting), "{{Hello}}")
+                        .ReplaceIfNotNull(HttpUtility.HtmlEncode(name), "{{World}}");
+                    
+                    if (name is null && param.TryGetValue("name", out var value))
+                    {
+                        template = template.Replace("{{World}}", HttpUtility.HtmlEncode(HttpUtility.UrlDecode(value)));
+                    }
+                    if (greeting is null && param.TryGetValue("greeting", out value))
+                    {
+                        template = template.Replace("{{Hello}}", HttpUtility.HtmlEncode(HttpUtility.UrlDecode(value)));
+                    }
+                    
+                    body = Encoding.UTF8.GetBytes(template);
+                    head.Append("HTTP/1.1 200 OK\r\n")
+                        .Append($"Content-Length:{body.Length}\r\n")
+                        .Append("Content-Type: text/html; charset=utf-8\r\n")
+                        .AppendIfNot(name == null, $"Set-Cookie: name={HttpUtility.UrlEncode(name)}\r\n")
+                        .AppendIfNot(greeting == null, $"Set-Cookie: greeting={HttpUtility.UrlEncode(greeting)}\r\n");
+                    break;
+                case "/groot.gif":
+                    body = File.ReadAllBytes("groot.gif");
+                    head.Append("HTTP/1.1 200 OK\r\n")
+                        .Append($"Content-Length:{body.Length}\r\n")
+                        .Append("Content-Type: image/gif;\r\n");
+                    break;
+                case "/time.html":
+                    body = File.ReadAllBytes("time.template.html");
+                    template = Encoding.UTF8
+                        .GetString(body)
+                        .Replace("{{ServerTime}}",DateTime.Now.ToString(CultureInfo.InvariantCulture));
+                    
+                    body = Encoding.UTF8.GetBytes(template);
+                    head.Append("HTTP/1.1 200 OK\r\n")
+                        .Append($"Content-Length:{body.Length}\r\n")
+                        .Append("Content-Type: text/html; charset=utf-8;\r\n");
+                    break;
+                default:
+                    head.Append("HTTP/1.1 404 Not Found\r\n")
+                        .Append("Content-Length:0\r\n");
+                    break;
+            }
+
+            head.Append("\r\n");
+
             return CreateResponseBytes(head, body);
         }
 
@@ -207,5 +275,14 @@ namespace Sockets
                 Console.WriteLine(">>> ");
             }
         }
+    }
+
+    public static class AsynchronousSocketListenerExtensions
+    {
+        public static string ReplaceIfNotNull(this string baseString, string value, string stringToReplace)
+            => value == null ? baseString : baseString.Replace(stringToReplace, value);
+
+        public static StringBuilder AppendIfNot(this StringBuilder builder, bool predicate, string value)
+            => predicate ? builder : builder.Append(value);
     }
 }
