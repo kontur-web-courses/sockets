@@ -159,16 +159,27 @@ namespace Sockets
 
         private static byte[] ProcessRequest(Request request)
         {
-            // TODO
-            var head = new StringBuilder("HTTP/1.1 404 Not Found");
-            var body = new byte[0];
+            StringBuilder head = null;
+            byte[] body = null;
+            if (request.RequestUri == "/" || request.RequestUri == "/hello.html")
+            {
+                body = File.ReadAllBytes("hello.html");
+                head = new StringBuilder("HTTP/1.1 200 OK\r\n");
+                head.Append("Content-Type: text/html; charset=utf-8\r\n");
+                head.Append("Content-Length: "+body.Length.ToString());
+            }
+            else
+            {
+                head = new StringBuilder("HTTP/1.1 404 Not Found");
+                body = new byte[0];
+            }
             return CreateResponseBytes(head, body);
         }
 
         // Собирает ответ в виде массива байт из байтов строки head и байтов body.
         private static byte[] CreateResponseBytes(StringBuilder head, byte[] body)
         {
-            byte[] headBytes = Encoding.ASCII.GetBytes(head.ToString()+"\\r\\n\\r\\n");
+            byte[] headBytes = Encoding.ASCII.GetBytes(head.ToString()+"\r\n\r\n");
             byte[] responseBytes = new byte[headBytes.Length + body.Length];
             Array.Copy(headBytes, responseBytes, headBytes.Length);
             Array.Copy(body, 0,
