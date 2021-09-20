@@ -172,16 +172,11 @@ namespace Sockets
             {
                 case "/":
                 case "/hello.html":
-
                     body = File.ReadAllBytes("hello.html");
                     var template = Encoding.UTF8
-                        .GetString(body);
-
-                    if (collection["name"] is not null)
-                        template = template.Replace("{{Hello}}", HttpUtility.HtmlEncode(collection["name"]));
-
-                    if (collection["greeting"] is not null)
-                        template = template.Replace("{{World}}", HttpUtility.HtmlEncode(collection["greeting"]));
+                        .GetString(body)
+                        .ReplaceIfNotNull(HttpUtility.HtmlEncode(collection["name"]), "{{Hello}}")
+                        .ReplaceIfNotNull(HttpUtility.HtmlEncode(collection["greeting"]), "{{World}}");
 
                     body = Encoding.UTF8.GetBytes(template);
                     head.Append("HTTP/1.1 200 OK\r\n")
@@ -258,5 +253,11 @@ namespace Sockets
                 Console.WriteLine(">>> ");
             }
         }
+    }
+
+    public static class AsynchronousSocketListenerExtensions
+    {
+        public static string ReplaceIfNotNull(this string baseString, string value, string stringToReplace)
+            => value == null ? baseString : baseString.Replace(stringToReplace, value);
     }
 }
