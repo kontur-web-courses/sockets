@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Web;
@@ -160,58 +161,101 @@ namespace Sockets
         private static byte[] ProcessRequest(Request request)
         {
             // TODO
-            // 404
-            StringBuilder head = new StringBuilder();
-            byte[] body = new byte[0];
-            var requestUri = request.RequestUri.ToString();
-            Console.WriteLine(requestUri);
+            var head = new StringBuilder();
+            var body = new byte[0];
+            var requestUri = request.RequestUri;
+            // Console.WriteLine(requestUri);
             NameValueCollection parameters = null;
+            var cookies = new Dictionary<string, string>();
             
+            // Get Cookie
+            foreach (var header in request.Headers)
+            {
+                Console.WriteLine($"{header.Name}: {header.Value}");
+                if (header.Name.ToLower() == "cookie")
+                {
+                    var value = HttpUtility.UrlDecode(header.Value);
+                    var cookiesNameValuePairs = value.Split(";")
+                        .Select(s => s.Trim())
+                        .Select(cookiePair => cookiePair.Split("="));
+                    
+                    foreach (var cookieNameValue in cookiesNameValuePairs)
+                    {
+                        if (cookieNameValue.Length == 2)
+                        {
+                            cookies[cookieNameValue[0]] = cookieNameValue[1];
+                        }
+                    }
+
+                }
+            }
+            
+            // Get Query Parameters
             if (requestUri.Contains("?"))
             {
                 var parametersStart = requestUri.IndexOf("?") + 1;
                 var parameterSubstring = requestUri.Substring(parametersStart);
-                // Console.WriteLine("parameterSubstring");
-                // Console.WriteLine(parameterSubstring);
                 parameters = HttpUtility.ParseQueryString(parameterSubstring);
             }
             if (requestUri == "/" || requestUri.StartsWith("/?") || requestUri.StartsWith("/hello.html"))
             {
                 body = File.ReadAllBytes("hello.html");
+                head.Append("HTTP/1.1 200 OK\r\n");
+                head.Append("Content-Type: text/html; charset=utf-8\r\n");
+                String? name = null;
+                String? greeting = null;
+                
+                if (cookies.ContainsKey("name"))
+                {
+                    name = cookies["name"];
+                }
+
+                if (cookies.ContainsKey("greeting"))
+                {
+                    greeting = cookies["greeting"];
+                }
 
                 if (parameters != null)
                 {
-                    var greeting = parameters["greeting"];
-                    var name = parameters["name"];
-                    
-                    var stringContent = Encoding.UTF8.GetString(body);
-
-                    var replaced = stringContent;
-                    if (greeting != null)
+                    if (parameters["greeting"] != null)
                     {
-                        replaced = replaced.Replace("{{Hello}}", greeting);
+                        greeting = parameters["greeting"];
+                        head.Append($"Set-Cookie: greeting={HttpUtility.UrlEncode(HttpUtility.HtmlEncode(greeting))}\r\n");
                     }
-
-                    if (name != null)
+                
+                    if (parameters["name"] != null)
                     {
-                        replaced = replaced.Replace("{{World}}", name);
+                        name = parameters["name"];
+                        head.Append($"Set-Cookie: name={HttpUtility.UrlEncode(HttpUtility.HtmlEncode(name))}\r\n");
                     }
-
-                    body = Encoding.UTF8.GetBytes(replaced);
                 }
-                head.Append("HTTP/1.1 200 OK\r\n");
-                head.Append("Content-Type: text/html; charset=utf-8\r\n");
-                // head.Append($"Content-Length: {body.Length}\r\n");
-                // head.Append("\r\n");
+
+                var stringContent = Encoding.UTF8.GetString(body);
+
+                var replaced = stringContent;
+                if (greeting != null)
+                {
+                    var safeReplacement = HttpUtility.HtmlEncode(greeting);
+                    replaced = replaced.Replace("{{Hello}}", safeReplacement);
+                }
+
+                if (name != null)
+                {
+                    var safeReplacement = HttpUtility.HtmlEncode(name);
+                    replaced = replaced.Replace("{{World}}", safeReplacement);
+                    
+                }
+
+                body = Encoding.UTF8.GetBytes(replaced);
+                
             } else if (requestUri == "/groot.gif")
             {
-                body = File.ReadAllBytes("groot.gif");
-                
                 head.Append("HTTP/1.1 200 OK\r\n");
                 head.Append("Content-Type: image/gif\r\n");
+                
+                body = File.ReadAllBytes("groot.gif");
             } else if (requestUri == "/time.html")
             {
-                // var data = File.ReadAllText("time.template.html");
                 var rawContent = File.ReadAllBytes("time.template.html");
                 var stringContent = Encoding.UTF8.GetString(rawContent);
                 var replaced = stringContent.Replace("{{ServerTime}}", DateTime.Now.ToString());
@@ -229,6 +273,7 @@ namespace Sockets
             head.Append($"Content-Length: {body.Length}\r\n");
             head.Append("\r\n");
 
+            Console.WriteLine(head);
             return CreateResponseBytes(head, body);
         }
 
