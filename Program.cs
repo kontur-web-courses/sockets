@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.InteropServices.ComTypes;
 using System.Text;
 using System.Threading;
 using System.Web;
@@ -157,11 +158,68 @@ namespace Sockets
             }
         }
 
+        private static string GetNameFromCookie(Request request)
+        {
+            if (request.Headers.Any(h => h.Name == "Cookie"))
+            {
+                var cookies = request.Headers
+                    .Where(h => h.Name == "Cookie")
+                    .Select(h => h.Value)
+                    .First().Split("name=");
+                return cookies.Length > 1 ? cookies[1] : null;
+            }
+            
+            return null;
+        }
+
         private static byte[] ProcessRequest(Request request)
         {
-            // TODO
-            var head = new StringBuilder("OK");
+            var head = new StringBuilder("HTTP/1.1 404 Not Found\r\n\r\n");
             var body = new byte[0];
+            byte[] file;
+            string textFile;
+            var queries = new NameValueCollection();
+
+            if (request.RequestUri == "/groot.gif")
+            {
+                file = File.ReadAllBytes("groot.gif");
+                head = new StringBuilder($"HTTP/1.1 200 OK\r\nContent-Type: image/gif\r\nContent-Length: {file.Length}\r\n\r\n");
+                body = file;
+            }
+            else if (request.RequestUri == "/" || 
+                     request.RequestUri == "/hello.html" || 
+                     request.RequestUri.StartsWith("/hello.html?"))
+            {
+                textFile = File.ReadAllText("hello.html", Encoding.UTF8);
+                head = new StringBuilder("HTTP/1.1 200 OK\r\n" +
+                                         "Content-Type: text/html; charset=utf-8\r\n");
+                var reqAndParametrs = request.RequestUri.Split('?');
+                queries["name"] ??= GetNameFromCookie(request);
+                if (reqAndParametrs.Length == 2)
+                {
+                    queries = HttpUtility.ParseQueryString(reqAndParametrs[1]);
+                    if (queries["greeting"] != null)
+                    {
+                        textFile = textFile.Replace("{{Hello}}", HttpUtility.HtmlEncode(queries["greeting"]));
+                    }
+                }
+                if (queries["name"] != null)
+                {
+                    textFile = textFile.Replace("{{World}}", HttpUtility.HtmlEncode(HttpUtility.UrlDecode(queries["name"])));
+                    head.Append($"Set-Cookie: name={HttpUtility.UrlEncode(queries["name"])}\r\n");   
+                }
+                body = Encoding.UTF8.GetBytes(textFile);
+                head.Append($"Content-Length: {body.Length}\r\n\r\n");
+            }
+            else if (request.RequestUri == "/time.html")
+            {
+                file = Encoding.UTF8.GetBytes(
+                    File.ReadAllText("time.template.html")
+                        .Replace("{{ServerTime}}", DateTime.Now.ToString()));
+                head = new StringBuilder($"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {file.Length}\r\n\r\n");
+                body = file;
+            }
+
             return CreateResponseBytes(head, body);
         }
 
