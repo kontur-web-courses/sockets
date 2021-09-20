@@ -160,8 +160,50 @@ namespace Sockets
         private static byte[] ProcessRequest(Request request)
         {
             // TODO
-            var head = new StringBuilder("OK");
             var body = new byte[0];
+            var head = new StringBuilder("HTTP/1.1 200 OK\r\n");
+            var indexOfQueryString = request.RequestUri.IndexOf("hello.html", 1, StringComparison.Ordinal);
+            if (request.RequestUri.Equals("/") || indexOfQueryString != -1)
+            {
+                body = File.ReadAllBytes("hello.html");
+                if (request.RequestUri.Length >= indexOfQueryString + 11)
+                {
+                    var queryString = HttpUtility.ParseQueryString(request.RequestUri.Substring(indexOfQueryString + 11));
+                    body = Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(body)
+                        .Replace("{{Hello}}", $"{HttpUtility.HtmlEncode(queryString["greeting"] ?? "{{Hello}}")}")
+                        .Replace("{{World}}", $"{HttpUtility.HtmlEncode(queryString["name"] ?? "{{World}}")}"));
+                    if (queryString["name"] != null)
+                    {
+                        head.Append($"Set-Cookie: name={HttpUtility.UrlEncode(HttpUtility.HtmlEncode(queryString["name"]))}\r\n");
+                    }
+                }
+
+                var name = request.Headers.FirstOrDefault(header => header.Name.Equals("Cookie"))?.Value
+                    .Split(";")
+                    .FirstOrDefault(str => str.IndexOf("name", StringComparison.Ordinal) != -1)
+                    ?.Split("=")[1];
+                if (name != null)
+                    body = Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(body)
+                        .Replace("{{World}}", $"{HttpUtility.UrlDecode(name)}"));
+
+                head.Append("Content-Type: text/html; charset=utf-8\r\n");
+            }
+            else if (request.RequestUri.Equals("/groot.gif"))
+            {
+                body = File.ReadAllBytes("groot.gif");
+                head.Append("Content-Type: image/gif\r\n");
+            }
+            else if (request.RequestUri.Equals("/time.html"))
+            {
+                body = Encoding.UTF8.GetBytes(
+                    Encoding.UTF8.GetString(
+                        File.ReadAllBytes("time.template.html"))
+                        .Replace("{{ServerTime}}", $"{DateTime.Now}"));
+                head.Append("Content-Type: text/html; charset=utf-8\r\n");
+            }
+
+            head.Append($"Content-Length: {body.Length}\r\n");
+            head.Append("\r\n");
             return CreateResponseBytes(head, body);
         }
 
