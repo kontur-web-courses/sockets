@@ -161,24 +161,25 @@ namespace Sockets
         {
             StringBuilder head = null;
             byte[] body = null;
-            if (request.RequestUri == "/" || request.RequestUri == "/hello.html")
+            switch (request.RequestUri)
             {
-                body = File.ReadAllBytes("hello.html");
-                head = new StringBuilder("HTTP/1.1 200 OK\r\n");
-                head.Append("Content-Type: text/html; charset=utf-8\r\n");
-                head.Append("Content-Length: "+body.Length.ToString());
-            }
-            else if (request.RequestUri == "/groot.gif")
-            {
-                body = File.ReadAllBytes("groot.gif");
-                head = new StringBuilder("HTTP/1.1 200 OK\r\n");
-                head.Append("Content-Type: image/gif\r\n");
-                head.Append("Content-Length: "+body.Length.ToString());
-            }
-            else
-            {
-                head = new StringBuilder("HTTP/1.1 404 Not Found");
-                body = new byte[0];
+                case "/":
+                case "/hello.html":
+                    body = File.ReadAllBytes("hello.html");
+                    head = new StringBuilder("HTTP/1.1 200 OK\r\n");
+                    head.Append("Content-Type: text/html; charset=utf-8\r\n");
+                    head.Append("Content-Length: "+body.Length.ToString());
+                    break;
+                case "/groot.gif":
+                    body = File.ReadAllBytes("groot.gif");
+                    head = new StringBuilder("HTTP/1.1 200 OK\r\n");
+                    head.Append("Content-Type: image/gif\r\n");
+                    head.Append("Content-Length: "+body.Length.ToString());
+                    break;
+                default:
+                    head = new StringBuilder("HTTP/1.1 404 Not Found");
+                    body = new byte[0];
+                    break;
             }
             return CreateResponseBytes(head, body);
         }
