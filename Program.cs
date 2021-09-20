@@ -166,27 +166,32 @@ namespace Sockets
             {
                 case "/":
                 case "/hello.html":
-                {
                     body = File.ReadAllBytes("hello.html");
                     head.Append("HTTP/1.1 200 OK\r\n")
                         .Append($"Content-Length:{body.Length}\r\n")
                         .Append("Content-Type: text/html; charset=utf-8\r\n");
                     break;
-                }
                 case "/groot.gif":
-                {
                     body = File.ReadAllBytes("groot.gif");
                     head.Append("HTTP/1.1 200 OK\r\n")
                         .Append($"Content-Length:{body.Length}\r\n")
                         .Append("Content-Type: image/gif;\r\n");
                     break;
-                }
+                case "/time.html":
+                    body = File.ReadAllBytes("time.template.html");
+                    var template = Encoding.UTF8
+                        .GetString(body)
+                        .Replace("{{ServerTime}}",DateTime.Now.ToString(CultureInfo.InvariantCulture));
+                    
+                    body = Encoding.UTF8.GetBytes(template);
+                    head.Append("HTTP/1.1 200 OK\r\n")
+                        .Append($"Content-Length:{body.Length}\r\n")
+                        .Append("Content-Type: text/html; charset=utf-8;\r\n");
+                    break;
                 default:
-                {
                     head.Append("HTTP/1.1 404 Not Found\r\n")
                         .Append("Content-Length:0\r\n");
                     break;
-                }
             }
 
             head.Append("\r\n");
