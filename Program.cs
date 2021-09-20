@@ -161,11 +161,28 @@ namespace Sockets
         {
             StringBuilder head = null;
             byte[] body = null;
-            switch (request.RequestUri)
+            string parameters = null;
+            string bodyString = null;
+            NameValueCollection paramCollection = null;
+            var tmp = request.RequestUri.Split("?");
+            var uri = tmp[0];
+            if (tmp.Length==2)
+                parameters = tmp[1];
+            switch (uri)
             {
                 case "/":
                 case "/hello.html":
                     body = File.ReadAllBytes("hello.html");
+                    if (parameters != null)
+                    {
+                        bodyString = Encoding.UTF8.GetString(body);
+                        paramCollection = HttpUtility.ParseQueryString(parameters);
+                        if (paramCollection["name"] != null)
+                            bodyString = bodyString.Replace("{{World}}", paramCollection["name"]);
+                        if (paramCollection["greeting"] != null)
+                            bodyString = bodyString.Replace("{{Hello}}", paramCollection["greeting"]);
+                        body = Encoding.UTF8.GetBytes(bodyString);
+                    }
                     head = new StringBuilder("HTTP/1.1 200 OK\r\n");
                     head.Append("Content-Type: text/html; charset=utf-8\r\n");
                     break;
@@ -176,7 +193,7 @@ namespace Sockets
                     break;
                 case "/time.html":
                     body = File.ReadAllBytes("time.template.html");
-                    var bodyString = Encoding.UTF8.GetString(body);
+                    bodyString = Encoding.UTF8.GetString(body);
                     bodyString = bodyString.Replace("{{ServerTime}}", DateTime.Now.ToString());
                     body = Encoding.UTF8.GetBytes(bodyString);
                     head = new StringBuilder("HTTP/1.1 200 OK\r\n");
