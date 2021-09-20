@@ -172,9 +172,9 @@ namespace Sockets
                 case "/hello.html":
                     var helloTemplate  = Encoding.UTF8.GetString(File.ReadAllBytes("hello.html"));
                     if (query["name"] != null)
-                        helloTemplate = helloTemplate.Replace("{{World}}", query["name"]);
+                        helloTemplate = helloTemplate.Replace("{{World}}", HttpUtility.HtmlEncode(query["name"]));
                     if (query["greeting"] != null)
-                        helloTemplate = helloTemplate.Replace("{{Hello}}", query["greeting"]);
+                        helloTemplate = helloTemplate.Replace("{{Hello}}", HttpUtility.HtmlEncode(query["greeting"]));
                     body = Encoding.UTF8.GetBytes(helloTemplate);
                     headers = $"Content-Type: text/html; charset=utf-8\r\nContent-Length: {body.Length}";
                     break;
