@@ -160,8 +160,75 @@ namespace Sockets
         private static byte[] ProcessRequest(Request request)
         {
             // TODO
-            var head = new StringBuilder("OK");
-            var body = new byte[0];
+            // 404
+            StringBuilder head = new StringBuilder();
+            byte[] body = new byte[0];
+            var requestUri = request.RequestUri.ToString();
+            Console.WriteLine(requestUri);
+            NameValueCollection parameters = null;
+            
+            if (requestUri.Contains("?"))
+            {
+                var parametersStart = requestUri.IndexOf("?") + 1;
+                var parameterSubstring = requestUri.Substring(parametersStart);
+                // Console.WriteLine("parameterSubstring");
+                // Console.WriteLine(parameterSubstring);
+                parameters = HttpUtility.ParseQueryString(parameterSubstring);
+            }
+            if (requestUri == "/" || requestUri.StartsWith("/?") || requestUri.StartsWith("/hello.html"))
+            {
+                body = File.ReadAllBytes("hello.html");
+
+                if (parameters != null)
+                {
+                    var greeting = parameters["greeting"];
+                    var name = parameters["name"];
+                    
+                    var stringContent = Encoding.UTF8.GetString(body);
+
+                    var replaced = stringContent;
+                    if (greeting != null)
+                    {
+                        replaced = replaced.Replace("{{Hello}}", greeting);
+                    }
+
+                    if (name != null)
+                    {
+                        replaced = replaced.Replace("{{World}}", name);
+                    }
+
+                    body = Encoding.UTF8.GetBytes(replaced);
+                }
+                head.Append("HTTP/1.1 200 OK\r\n");
+                head.Append("Content-Type: text/html; charset=utf-8\r\n");
+                // head.Append($"Content-Length: {body.Length}\r\n");
+                // head.Append("\r\n");
+            } else if (requestUri == "/groot.gif")
+            {
+                body = File.ReadAllBytes("groot.gif");
+                
+                head.Append("HTTP/1.1 200 OK\r\n");
+                head.Append("Content-Type: image/gif\r\n");
+            } else if (requestUri == "/time.html")
+            {
+                // var data = File.ReadAllText("time.template.html");
+                var rawContent = File.ReadAllBytes("time.template.html");
+                var stringContent = Encoding.UTF8.GetString(rawContent);
+                var replaced = stringContent.Replace("{{ServerTime}}", DateTime.Now.ToString());
+                body = Encoding.UTF8.GetBytes(replaced);
+                
+                head.Append("HTTP/1.1 200 OK\r\n");
+                head.Append("Content-Type: text/html; charset=utf-8\r\n");
+            }
+            else
+            {
+                head.Append("HTTP/1.1 404 Not Found\r\n");
+                
+                body = new byte[0];
+            }
+            head.Append($"Content-Length: {body.Length}\r\n");
+            head.Append("\r\n");
+
             return CreateResponseBytes(head, body);
         }
 
