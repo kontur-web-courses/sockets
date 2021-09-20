@@ -163,27 +163,39 @@ namespace Sockets
             var path = request.RequestUri;
             var head = new StringBuilder();
             byte[] body;
-            if (path == "/" || path == "/hello")
+            switch (path)
             {
-                body = File.ReadAllBytes("hello.html");
-                head.Append("HTTP/1.1 200 OK\r\n");
-                head.Append("Content-Type: text/html; charset=utf-8\r\n");
-                head.Append($"Content-Length: {body.Length}\r\n");
-                head.Append("\r\n");
-            }
-            else if (path == "/groot.gif")
-            {
-                body = File.ReadAllBytes("groot.gif");
-                head.Append("HTTP/1.1 200 OK\r\n");
-                head.Append("Content-Type: image/gif\r\n");
-                head.Append($"Content-Length: {body.Length}\r\n");
-                head.Append("\r\n");
-            }
-            else
-            {
-                head.Append("HTTP/1.1 404 Not Found\r\n");
-                head.Append("\r\n");
-                body = new byte[0];
+                case "/":
+                    goto case "/hello";
+                case "/hello":
+                    body = File.ReadAllBytes("hello.html");
+                    head.Append("HTTP/1.1 200 OK\r\n");
+                    head.Append("Content-Type: text/html; charset=utf-8\r\n");
+                    head.Append($"Content-Length: {body.Length}\r\n");
+                    head.Append("\r\n");
+                    break;
+                case "/groot.gif":
+                    body = File.ReadAllBytes("groot.gif");
+                    head.Append("HTTP/1.1 200 OK\r\n");
+                    head.Append("Content-Type: image/gif\r\n");
+                    head.Append($"Content-Length: {body.Length}\r\n");
+                    head.Append("\r\n");
+                    break;
+                case "/time.html":
+                    var bytes = File.ReadAllBytes("time.template.html");
+                    var str = Encoding.UTF8.GetString(bytes)
+                        .Replace("{{ServerTime}}", DateTime.Now.ToString());
+                    body = Encoding.UTF8.GetBytes(str);
+                    head.Append("HTTP/1.1 200 OK\r\n");
+                    head.Append("Content-Type: text/html; charset=utf-8\r\n");
+                    head.Append($"Content-Length: {body.Length}\r\n");
+                    head.Append("\r\n");
+                    break;
+                default:  
+                    head.Append("HTTP/1.1 404 Not Found\r\n");
+                    head.Append("\r\n");
+                    body = new byte[0];
+                    break;
             }
             return CreateResponseBytes(head, body);
         }
