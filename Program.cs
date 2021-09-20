@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
@@ -159,9 +160,24 @@ namespace Sockets
 
         private static byte[] ProcessRequest(Request request)
         {
-            // TODO
-            var head = new StringBuilder("OK");
-            var body = new byte[0];
+            var path = request.RequestUri;
+            var head = new StringBuilder();
+            byte[] body;
+            if (path == "/" || path == "/hello")
+            {
+                body = File.ReadAllBytes("hello.html");
+                var stringbody = body.ToString();
+                head.Append("HTTP/1.1 200 OK\r\n");
+                head.Append("Content-Type: text/html; charset=utf-8\r\n");
+                head.Append($"Content-Length: {body.Length}\r\n");
+                head.Append("\r\n");
+            }
+            else
+            {
+                head.Append("HTTP/1.1 404 Not Found\r\n");
+                head.Append("\r\n");
+                body = new byte[0];
+            }
             return CreateResponseBytes(head, body);
         }
 
