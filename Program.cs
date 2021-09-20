@@ -161,14 +161,28 @@ namespace Sockets
         private static byte[] ProcessRequest(Request request)
         {
             var path = request.RequestUri;
+            var parts = path.Split("?");
+            var page = parts[0];
             var head = new StringBuilder();
             byte[] body;
-            switch (path)
+            switch (page)
             {
                 case "/":
-                    goto case "/hello";
+                case "/hello.html":
                 case "/hello":
-                    body = File.ReadAllBytes("hello.html");
+                    var bodyBytes = File.ReadAllBytes("hello.html");
+                    var greeting = "Hello";
+                    var name = "World";
+                    if (parts.Length > 1)
+                    {
+                        var param = HttpUtility.ParseQueryString(path.Split("?")[1]);
+                        greeting = param["greeting"] ?? "Hello";
+                        name = param["name"] ?? "World";
+                    }
+                    var bodyStr = Encoding.UTF8.GetString(bodyBytes)
+                        .Replace("{{Hello}}", greeting)
+                        .Replace("{{World}}", name);
+                    body = Encoding.UTF8.GetBytes(bodyStr);
                     head.Append("HTTP/1.1 200 OK\r\n");
                     head.Append("Content-Type: text/html; charset=utf-8\r\n");
                     head.Append($"Content-Length: {body.Length}\r\n");
