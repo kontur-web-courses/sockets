@@ -159,16 +159,88 @@ namespace Sockets
 
         private static byte[] ProcessRequest(Request request)
         {
-            // TODO
-            var head = new StringBuilder("OK");
-            var body = new byte[0];
+            StringBuilder head = null;
+            byte[] body = null;
+            string parameters = null;
+            string bodyString = null;
+            NameValueCollection paramCollection = null;
+            var tmp = request.RequestUri.Split("?");
+            var uri = tmp[0];
+            if (tmp.Length==2)
+                parameters = tmp[1];
+            switch (uri)
+            {
+                case "/":
+                case "/hello.html":
+                    head = new StringBuilder("HTTP/1.1 200 OK\r\n"); 
+                    head.Append("Content-Type: text/html; charset=utf-8\r\n");
+                    body = File.ReadAllBytes("hello.html");
+                    if (parameters != null)
+                    {
+                        bodyString = Encoding.UTF8.GetString(body);
+                        paramCollection = HttpUtility.ParseQueryString(parameters);
+                        if (paramCollection["name"] != null)
+                        {
+                            var name = paramCollection["name"];
+                            bodyString = bodyString.Replace("{{World}}", HttpUtility.HtmlEncode(name));
+                            
+                            head.Append($"Set-Cookie: name={HttpUtility.UrlEncode(name)}\r\n");
+                        }
+                        if (paramCollection["greeting"] != null)
+                            bodyString = bodyString.Replace("{{Hello}}", 
+                                HttpUtility.HtmlEncode(paramCollection["greeting"]));
+                        body = Encoding.UTF8.GetBytes(bodyString);
+                    }
+
+                    if (parameters == null || paramCollection["name"] == null)
+                    {
+                        var cookieHeader = request.Headers.FirstOrDefault(h => h.Name == "Cookie");
+                        if (cookieHeader != null)
+                        {
+                            var cookieString = cookieHeader.Value;
+                            foreach (var cookie in cookieString.Split(';'))
+                            {
+                                var tmp1 = cookie.Split('=');
+                                var name = tmp1[0];
+                                var val = HttpUtility.UrlDecode(tmp1[1]);
+                                if (name == "name")
+                                {
+                                    val = HttpUtility.HtmlEncode(val);
+                                    bodyString = Encoding.UTF8.GetString(body);
+                                    bodyString = bodyString.Replace("{{World}}", val);
+                                    body = Encoding.UTF8.GetBytes(bodyString);
+                                }
+                            }
+                        }
+                    }
+                    
+                    break;
+                case "/groot.gif":
+                    body = File.ReadAllBytes("groot.gif");
+                    head = new StringBuilder("HTTP/1.1 200 OK\r\n");
+                    head.Append("Content-Type: image/gif\r\n");
+                    break;
+                case "/time.html":
+                    body = File.ReadAllBytes("time.template.html");
+                    bodyString = Encoding.UTF8.GetString(body);
+                    bodyString = bodyString.Replace("{{ServerTime}}", DateTime.Now.ToString());
+                    body = Encoding.UTF8.GetBytes(bodyString);
+                    head = new StringBuilder("HTTP/1.1 200 OK\r\n");
+                    head.Append("Content-Type: text/html; charset=utf-8\r\n");
+                    break;
+                default:
+                    head = new StringBuilder("HTTP/1.1 404 Not Found");
+                    body = new byte[0];
+                    break;
+            }
             return CreateResponseBytes(head, body);
         }
 
         // Собирает ответ в виде массива байт из байтов строки head и байтов body.
         private static byte[] CreateResponseBytes(StringBuilder head, byte[] body)
         {
-            byte[] headBytes = Encoding.ASCII.GetBytes(head.ToString());
+            head.Append("Content-Length: "+body.Length.ToString());
+            byte[] headBytes = Encoding.ASCII.GetBytes(head.ToString()+"\r\n\r\n");
             byte[] responseBytes = new byte[headBytes.Length + body.Length];
             Array.Copy(headBytes, responseBytes, headBytes.Length);
             Array.Copy(body, 0,
