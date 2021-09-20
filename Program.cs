@@ -166,9 +166,16 @@ namespace Sockets
             if (path == "/" || path == "/hello")
             {
                 body = File.ReadAllBytes("hello.html");
-                var stringbody = body.ToString();
                 head.Append("HTTP/1.1 200 OK\r\n");
                 head.Append("Content-Type: text/html; charset=utf-8\r\n");
+                head.Append($"Content-Length: {body.Length}\r\n");
+                head.Append("\r\n");
+            }
+            else if (path == "/groot.gif")
+            {
+                body = File.ReadAllBytes("groot.gif");
+                head.Append("HTTP/1.1 200 OK\r\n");
+                head.Append("Content-Type: image/gif\r\n");
                 head.Append($"Content-Length: {body.Length}\r\n");
                 head.Append("\r\n");
             }
