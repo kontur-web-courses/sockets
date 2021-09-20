@@ -159,10 +159,80 @@ namespace Sockets
 
         private static byte[] ProcessRequest(Request request)
         {
-            // TODO
-            var head = new StringBuilder("HTTP/1.1 404 Not Found");
-            var body = Encoding.ASCII.GetBytes("\r\n");
-            return CreateResponseBytes(head, body);
+            if (request.RequestUri == "/" || request.RequestUri.StartsWith("/hello.html"))
+            {
+                var head = new StringBuilder("HTTP/1.1 200 OK\r\n");
+                var body = Encoding.UTF8.GetString(File.ReadAllBytes("hello.html"));
+                var splittedUri = request.RequestUri.Split('?');
+                if (splittedUri.Length > 1)
+                {
+                    var queryString = HttpUtility.ParseQueryString(splittedUri[1]);
+                    if (queryString["name"] != null)
+                    {
+                        body = body.Replace("{{World}}", HttpUtility.HtmlEncode(queryString["name"]));
+                        head.Append($"Set-Cookie: name={HttpUtility.UrlEncode(queryString["name"])}\r\n");
+                    }
+                    else
+                    {
+                        var cookie = request.Headers
+                            .FirstOrDefault(x => x.Name.StartsWith("Cookie"));
+                        if (cookie != null)
+                        {
+                            var name = HttpUtility.UrlDecode(cookie.Value
+                                .Split(";")
+                                .FirstOrDefault(x => x.Split('=')[0] == "name")?
+                                .Split('=')[1]);
+                            body = body.Replace("{{World}}", HttpUtility.HtmlEncode(name));
+                        }
+                    }
+                    if (queryString["greeting"] != null)
+                    {
+                        body = body.Replace("{{Hello}}", HttpUtility.HtmlEncode(queryString["greeting"]));
+                    }
+                }
+                else
+                {
+                    var cookie = request.Headers
+                        .FirstOrDefault(x => x.Name.StartsWith("Cookie"));
+                    if (cookie != null)
+                    {
+                        var name = HttpUtility.UrlDecode(cookie.Value
+                            .Split(";")
+                            .FirstOrDefault(x => x.Split('=')[0] == "name")?
+                            .Split('=')[1]);
+                        body = body.Replace("{{World}}", HttpUtility.HtmlEncode(name));
+                    }
+                }
+                head.Append("Content-Type: text/html; charset=utf-8\r\n");
+                head.Append($"Content-Length: {body.Length}\r\n");
+                head.Append("\r\n");
+                return CreateResponseBytes(head, Encoding.UTF8.GetBytes(body));
+            }
+            if (request.RequestUri == "/groot.gif")
+            {
+                var body = File.ReadAllBytes("groot.gif");
+                var head = new StringBuilder("HTTP/1.1 200 OK\r\n");
+                head.Append("Content-Type: image/gif\r\n");
+                head.Append($"Content-Length: {body.Length}\r\n");
+                head.Append("\r\n");
+                return CreateResponseBytes(head, body);
+            } 
+            if (request.RequestUri == "/time.html")
+            {
+                var body = Encoding.UTF8.GetString(File.ReadAllBytes("time.template.html"));
+                body = body.Replace("{{ServerTime}}", DateTime.Now.ToString(CultureInfo.InvariantCulture));
+                var head = new StringBuilder("HTTP/1.1 200 OK\r\n");
+                head.Append("Content-Type: text/html; charset=utf-8\r\n");
+                head.Append($"Content-Length: {body.Length}\r\n");
+                head.Append("\r\n");
+                return CreateResponseBytes(head, Encoding.UTF8.GetBytes(body));
+            }
+            else
+            {
+                var head = new StringBuilder("HTTP/1.1 404 Not Found\r\nContent-Length:0\r\n");
+                var body = new byte[0];
+                return CreateResponseBytes(head, body);
+            }
         }
 
         // Собирает ответ в виде массива байт из байтов строки head и байтов body.
