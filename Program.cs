@@ -166,16 +166,26 @@ namespace Sockets
         {
             if (new[] { "/", "/hello.html" }.Contains(request.RequestUri))
                 return CreateResponseBytes(
-                    new StringBuilder("HTTP/1.1 200 OK").Append("\r\n\r\n"),
+                    new StringBuilder("HTTP/1.1 200 OK"),
                     File.ReadAllBytes("hello.html"));
             return CreateResponseBytes(
-                new StringBuilder("HTTP/1.1 404 Not Found").Append("\r\n\r\n"),
+                new StringBuilder("HTTP/1.1 404 Not Found"),
                 Array.Empty<byte>());
+        }
+
+        private static void AddHeaders(StringBuilder head, int bodyLength)
+        {
+            head.Append('\n');
+            head.Append("Content-Type: text/html; charset=utf-8");
+            head.Append('\n');
+            head.Append($"Content-Length: {bodyLength}");
+            head.Append("\r\n\r\n");
         }
 
         // Собирает ответ в виде массива байт из байтов строки head и байтов body.
         private static byte[] CreateResponseBytes(StringBuilder head, byte[] body)
         {
+            AddHeaders(head, body.Length);
             var headBytes = Encoding.ASCII.GetBytes(head.ToString());
             var responseBytes = new byte[headBytes.Length + body.Length];
             Array.Copy(headBytes, responseBytes, headBytes.Length);
