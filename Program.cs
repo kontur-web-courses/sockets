@@ -186,15 +186,20 @@ namespace Sockets
         {
             var body = File.ReadAllText("hello.html");
             var head = $"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {body.Length}\r\n\r\n";
-            var parameters = HttpUtility.ParseQueryString(request.RequestUri.Split('?')[1]);
+            var splited = request.RequestUri.Split('?');
+            if (splited.Length < 2)
+                return (head, Encoding.UTF8.GetBytes(body));
+            var parameters = HttpUtility.ParseQueryString(splited[1]);
             if (parameters["greeting"] is { } greeting)
             {
-                body = body.Replace("{{Hello}}", greeting);
+                body = body.Replace("{{Hello}}", HttpUtility.HtmlEncode(greeting));
             }
+
             if (parameters["name"] is { } name)
             {
-                body = body.Replace("{{World}}", name);
+                body = body.Replace("{{World}}", HttpUtility.HtmlEncode(name));
             }
+
             return (head, Encoding.UTF8.GetBytes(body));
         }
 
