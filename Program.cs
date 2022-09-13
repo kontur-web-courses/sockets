@@ -159,9 +159,9 @@ namespace Sockets
 
         private static byte[] ProcessRequest(Request request)
         {
-            var head = new StringBuilder("HTTP/1.1 404 Not Found");
-            var body = new byte[0];
-            return CreateResponseBytes(head, body);
+            if (request.RequestUri == "/" || request.RequestUri == "/hello.html")
+                return CreateResponseBytes(new StringBuilder("HTTP/1.1 200 OK\r\n\r\n"), File.ReadAllBytes("hello.html"));
+            return CreateResponseBytes(new StringBuilder("HTTP/1.1 404 Not Found\r\n\r\n"), new byte[0]);
         }
 
         // Собирает ответ в виде массива байт из байтов строки head и байтов body.
