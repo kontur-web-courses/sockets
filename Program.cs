@@ -23,7 +23,7 @@ namespace Sockets
     {
         public string Url { get; private set; }
         public NameValueCollection Query { get; private set; }
-        public Dictionary<string, string> Cookies { get; private set; }
+        public IReadOnlyDictionary<string, string> Cookies { get; private set; }
 
         public RequestInfo(Request request)
         {
@@ -202,6 +202,9 @@ namespace Sockets
 
         private static byte[] ProcessRequest(Request rawRequest)
         {
+            const string HtmlUtf8ContentType = "text/html; charset=utf-8";
+            const string GifContentType = "image/gif";
+
             var request = new RequestInfo(rawRequest);
             switch (request.Url)
             {
@@ -213,18 +216,18 @@ namespace Sockets
                             .Replace("{{World}}", HttpUtility.HtmlEncode(request.Query?["name"] ?? HttpUtility.UrlDecode(request.Cookies.GetValueOrDefault("name")) ?? "World"));
                         var bodyBytes = Encoding.UTF8.GetBytes(html.ToString());
                         return CreateResponseBytes(200,
-                            contentType: "text/html; charset=utf-8", body: bodyBytes,
+                            contentType: HtmlUtf8ContentType, body: bodyBytes,
                             cookie: request.Query?["name"] is not null 
                                 ? $"name={HttpUtility.UrlEncode(request.Query["name"])}"
                                 : null);
                     }
 
                 case "/groot.gif":
-                    return CreateResponseBytes(200, "image/gif", File.ReadAllBytes("groot.gif"));
+                    return CreateResponseBytes(200, GifContentType, File.ReadAllBytes("groot.gif"));
                 case "/time.html":
                     {
                         var html = File.ReadAllText("time.template.html").Replace("{{ServerTime}}", DateTime.Now.ToString());
-                        return CreateResponseBytes(200, "text/html; charset=utf-8", Encoding.UTF8.GetBytes(html));
+                        return CreateResponseBytes(200, HtmlUtf8ContentType, Encoding.UTF8.GetBytes(html));
                     }
 
                 default:
