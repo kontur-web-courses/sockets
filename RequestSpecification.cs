@@ -13,8 +13,8 @@ namespace Sockets
         private const string Header2 = "UnknownHeader2: Value2\r\n";
         private const string Separator = "\r\n";
 
-        private Request.Header requestHeader1;
-        private Request.Header requestHeader2;
+        private Header requestHeader1;
+        private Header requestHeader2;
 
         private Request CreateRequest()
         {
@@ -23,7 +23,7 @@ namespace Sockets
                 Method = "GET",
                 HttpVersion = "HTTP/1.1",
                 RequestUri = "/users/1",
-                Headers = new List<Request.Header>(),
+                Headers = new List<Header>(),
                 MessageBody = new byte[0]
             };
         }
@@ -31,8 +31,8 @@ namespace Sockets
         [SetUp]
         public void SetUp()
         {
-            requestHeader1 = new Request.Header("UnknownHeader1", "Value1");
-            requestHeader2 = new Request.Header("UnknownHeader2", "Value2");
+            requestHeader1 = new Header("UnknownHeader1", "Value1");
+            requestHeader2 = new Header("UnknownHeader2", "Value2");
         }
 
         [Test]
@@ -130,7 +130,7 @@ namespace Sockets
             var expected = CreateRequest();
             expected.Headers.Add(requestHeader1);
             expected.Headers.Add(requestHeader2);
-            expected.Headers.Add(new Request.Header("Content-Length", "14"));
+            expected.Headers.Add(new Header("Content-Length", "14"));
             expected.MessageBody = Encoding.ASCII.GetBytes("just text body");
 
             var actual = Request.StupidParse(Encoding.ASCII.GetBytes(input));
@@ -149,7 +149,7 @@ namespace Sockets
             var expected = CreateRequest();
             expected.Headers.Add(requestHeader1);
             expected.Headers.Add(requestHeader2);
-            expected.Headers.Add(new Request.Header("Content-Length", "10"));
+            expected.Headers.Add(new Header("Content-Length", "10"));
             expected.MessageBody = Encoding.ASCII.GetBytes("just text ");
 
             var actual = Request.StupidParse(Encoding.ASCII.GetBytes(input));

@@ -1,3 +1,5 @@
+using System;
+using System.Text;
 using System.Web;
 
 namespace Sockets
@@ -20,5 +22,11 @@ namespace Sockets
                 ? s.Replace(oldPart, newPart)
                 : s;
         }
+
+        public static string FromBase64String(this string s, Encoding encoding = null) =>
+            (encoding ?? Encoding.UTF8).GetString(Convert.FromBase64String(s));
+
+        public static string ToBase64String(this string s, Encoding encoding = null) =>
+            Convert.ToBase64String((encoding ?? Encoding.UTF8).GetBytes(s));
     }
 }

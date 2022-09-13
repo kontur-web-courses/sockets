@@ -18,22 +18,11 @@ namespace Sockets
         public List<Header> Headers;
         public byte[] MessageBody;
 
-        public record Header(string Name, string Value);
-
-        public static class DefaultHeaders
-        {
-            public static Header HtmlContentType => new("Content-Type", "text/html; charset=utf-8");
-
-            public static Header SetCookie(string name, string value) => new("Set-Cookie", name + '=' + value);
-
-            public static Header ContentLength(int length) => new("Content-Length", length.ToString());
-        }
-
         // Структура http-запроса: https://www.w3.org/Protocols/rfc2616/rfc2616-sec5.html
         public static Request StupidParse(byte[] requestBytes)
         {
             var requestString = Encoding.ASCII.GetString(requestBytes);
-            var requestLine = ParseRequestLine(requestString, out int readCharsCount);
+            var (method, (uri, queryParams), httpVersion) = ParseRequestLine(requestString, out int readCharsCount);
             var headers = ParseHeaders(requestString, ref readCharsCount);
 
             if (headers == null) return null;
@@ -45,10 +34,10 @@ namespace Sockets
 
             return new Request
             {
-                Method = requestLine.Method,
-                RequestUri = requestLine.RequestUri.Uri,
-                RequestParams = requestLine.RequestUri.QueryParams,
-                HttpVersion = requestLine.HttpVersion,
+                Method = method,
+                RequestUri = uri,
+                RequestParams = queryParams,
+                HttpVersion = httpVersion,
                 Headers = headers,
                 MessageBody = messageBody
             };
@@ -111,7 +100,7 @@ namespace Sockets
         {
             var contentLengthHeader = headers.FirstOrDefault(
                 h => string.Equals(h.Name, "Content-Length", StringComparison.InvariantCultureIgnoreCase));
-            return contentLengthHeader != null ? (int?)int.Parse(contentLengthHeader.Value) : null;
+            return contentLengthHeader is not null ? int.Parse(contentLengthHeader.Value) : null;
         }
 
         private record RequestLine(string Method, RequestUriParts RequestUri, string HttpVersion);

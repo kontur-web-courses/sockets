@@ -3,19 +3,19 @@ using static Sockets.Request;
 
 namespace Sockets
 {
-    class Builder
+    internal class HeaderBuilder
     {
         private const string Separator = "\r\n";
 
         private StringBuilder builder;
 
-        private Builder(StringBuilder builder) => this.builder = builder.Append(Separator);
+        private HeaderBuilder(StringBuilder builder) => this.builder = builder.Append(Separator);
 
-        public static Builder ForOk() => new(new("HTTP/1.1 200 OK"));
+        public static HeaderBuilder ForOk() => new(new("HTTP/1.1 200 OK"));
 
-        public static Builder ForNotFound() => new(new("HTTP/1.1 404 Not Found"));
+        public static HeaderBuilder ForNotFound() => new(new("HTTP/1.1 404 Not Found"));
 
-        public Builder Append(Header header)
+        public HeaderBuilder Append(Header header)
         {
             builder.Append(header.Name).Append(':').Append(' ').Append(header.Value).Append(Separator);
             return this;
