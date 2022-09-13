@@ -1,10 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
+using static Sockets.Request;
 
 namespace Sockets
 {
@@ -16,6 +19,7 @@ namespace Sockets
     internal class AsynchronousSocketListener
     {
         private const int listeningPort = 11000;
+        private const string HelloFilename = "hello.html";
         private static ManualResetEvent connectionEstablished = new(false);
 
         public static void StartListening()
@@ -145,13 +149,48 @@ namespace Sockets
 
         private static byte[] ProcessRequest(Request request)
         {
-            var head = new StringBuilder("HTTP/1.1 404 Not Found\r\n");
-            var body = new byte[0];
-            return CreateResponseBytes(head, body);
+            var (head, body) = request switch
+            {
+                {RequestUri: "/hello.html"} => FromHelloFile(request.RequestParams),
+                {RequestUri: "/"} => FromFile(HelloFilename),
+                {RequestUri: "/groot.gif"} => FromFile("groot.gif"),
+                {RequestUri: "/time.html"} => FromTimeFile(),
+                _ => NotExisingPage()
+            };
+
+            return CreateResponseBytes(head, Encoding.UTF8.GetBytes(body));
         }
 
+        private static (Builder Head, string Body) FromFile(string filename) =>
+            FromFileContents(File.ReadAllText(filename));
+
+        private static (Builder Head, string Body) FromHelloFile(NameValueCollection requestParams)
+        {
+            var file = File.ReadAllText(HelloFilename)
+                .TryReplaceEncoded("{{Hello}}", requestParams["greeting"])
+                .TryReplaceEncoded("{{World}}", requestParams["name"]);
+            return FromFileContents(file);
+        }
+
+        private static (Builder Head, string Body) FromTimeFile()
+        {
+            var file = File.ReadAllText("time.template.html")
+                .Replace("{{ServerTime}}", DateTime.Now.ToString());
+            return FromFileContents(file);
+        }
+
+        private static (Builder Head, string Body) FromFileContents(string fileBytes)
+        {
+            var head = Builder.ForOk()
+                .Append(DefaultHeaders.HtmlContentType)
+                .Append(DefaultHeaders.ContentLength(fileBytes.Length));
+            return (head, fileBytes);
+        }
+
+        private static (Builder Head, string Body) NotExisingPage() => (Builder.ForNotFound(), string.Empty);
+
         // Собирает ответ в виде массива байт из байтов строки head и байтов body.
-        private static byte[] CreateResponseBytes(StringBuilder head, byte[] body)
+        private static byte[] CreateResponseBytes(Builder head, byte[] body)
         {
             var headBytes = Encoding.ASCII.GetBytes(head.ToString());
             var responseBytes = new byte[headBytes.Length + body.Length];
