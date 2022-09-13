@@ -164,28 +164,45 @@ namespace Sockets
 
         private static byte[] ProcessRequest(Request request)
         {
-            if (new[] { "/", "/hello.html" }.Contains(request.RequestUri))
-                return CreateResponseBytes(
-                    new StringBuilder("HTTP/1.1 200 OK"),
-                    File.ReadAllBytes("hello.html"));
-            return CreateResponseBytes(
-                new StringBuilder("HTTP/1.1 404 Not Found"),
-                Array.Empty<byte>());
+            return request.RequestUri switch
+            {
+                "/hello.html" => CreateResponseBytes(new StringBuilder("HTTP/1.1 200 OK"), 
+                    File.ReadAllBytes("hello.html"), "text/html; charset=utf-8"),
+                "/" => CreateResponseBytes(new StringBuilder("HTTP/1.1 200 OK"), 
+                    File.ReadAllBytes("hello.html"), "text/html; charset=utf-8"),
+                "/groot.gif" => CreateResponseBytes(new StringBuilder("HTTP/1.1 200 OK"), 
+                    File.ReadAllBytes("groot.gif"), "image/gif"),
+                "/time.html" => CreateResponseBytes(new StringBuilder("HTTP/1.1 200 OK"), 
+                    Replace(File.ReadAllBytes("time.template.html"), "{{ServerTime}}",
+                        DateTime.Now.ToString(CultureInfo.InvariantCulture)),
+                "text/html; charset=utf-8"),
+                _ => CreateResponseBytes(new StringBuilder("HTTP/1.1 404 Not Found"),
+                Array.Empty<byte>())
+            };
         }
 
-        private static void AddHeaders(StringBuilder head, int bodyLength)
+        private static byte[] Replace(byte[] bytes, string pattern, string value)
         {
-            head.Append('\n');
-            head.Append("Content-Type: text/html; charset=utf-8");
+            return Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(bytes)
+                    .Replace(pattern, value));
+        }
+
+        private static void AddHeaders(StringBuilder head, int bodyLength, string contentType)
+        {
+            if (contentType != null)
+            {
+                head.Append('\n');
+                head.Append($"Content-Type: {contentType}");
+            }
             head.Append('\n');
             head.Append($"Content-Length: {bodyLength}");
             head.Append("\r\n\r\n");
         }
 
         // Собирает ответ в виде массива байт из байтов строки head и байтов body.
-        private static byte[] CreateResponseBytes(StringBuilder head, byte[] body)
+        private static byte[] CreateResponseBytes(StringBuilder head, byte[] body, string contentType = null)
         {
-            AddHeaders(head, body.Length);
+            AddHeaders(head, body.Length, contentType);
             var headBytes = Encoding.ASCII.GetBytes(head.ToString());
             var responseBytes = new byte[headBytes.Length + body.Length];
             Array.Copy(headBytes, responseBytes, headBytes.Length);
