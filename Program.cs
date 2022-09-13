@@ -145,8 +145,7 @@ namespace Sockets
 
         private static byte[] ProcessRequest(Request request)
         {
-            // TODO
-            var head = new StringBuilder("OK");
+            var head = new StringBuilder("HTTP/1.1 404 Not Found\r\n");
             var body = new byte[0];
             return CreateResponseBytes(head, body);
         }
@@ -157,9 +156,7 @@ namespace Sockets
             var headBytes = Encoding.ASCII.GetBytes(head.ToString());
             var responseBytes = new byte[headBytes.Length + body.Length];
             Array.Copy(headBytes, responseBytes, headBytes.Length);
-            Array.Copy(body, 0,
-                responseBytes, headBytes.Length,
-                body.Length);
+            Array.Copy(body, 0, responseBytes, headBytes.Length, body.Length);
             return responseBytes;
         }
 
