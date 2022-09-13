@@ -165,8 +165,10 @@ namespace Sockets
             if (url == "/" || url == "/hello.html")
             {
                 var html = File.ReadAllText("hello.html");
-                    html = html.Replace("{{Hello}}", query?["greeting"] ?? "Hello").Replace("{{World}}", query?["name"] ?? "World");
-                return CreateResponseBytes(new StringBuilder("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: 332\r\n\r\n"), Encoding.UTF8.GetBytes(html));
+                html = html
+                    .Replace("{{Hello}}", HttpUtility.HtmlEncode(query?["greeting"] ?? "Hello"))
+                    .Replace("{{World}}", HttpUtility.HtmlEncode(query?["name"] ?? "World"));
+                return CreateResponseBytes(new StringBuilder($"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {html.Length}\r\n\r\n"), Encoding.UTF8.GetBytes(html));
             }
             if (url == "/groot.gif")
                 return CreateResponseBytes(new StringBuilder("HTTP/1.1 200 OK\r\nContent-Type: image/gif; charset=utf-8\r\nContent-Length: 749699\r\n\r\n"), File.ReadAllBytes("groot.gif"));
