@@ -7,6 +7,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
+using System.Web;
 using static Sockets.Request;
 
 namespace Sockets
@@ -151,35 +152,61 @@ namespace Sockets
         {
             var (head, body) = request switch
             {
-                {RequestUri: "/hello.html"} => FromHelloFile(request.RequestParams),
-                {RequestUri: "/"} => FromFile(HelloFilename),
+                {RequestUri: "/hello.html"} => FromHelloFile(request, true),
+                {RequestUri: "/"} => FromHelloFile(request, false),
                 {RequestUri: "/groot.gif"} => FromFile("groot.gif"),
                 {RequestUri: "/time.html"} => FromTimeFile(),
                 _ => NotExisingPage()
             };
 
-            return CreateResponseBytes(head, Encoding.UTF8.GetBytes(body));
+            return CreateResponseBytes(head, body);
         }
 
-        private static (Builder Head, string Body) FromFile(string filename) =>
-            FromFileContents(File.ReadAllText(filename));
+        private static (Builder Head, byte[] Body) FromFile(string filename) =>
+            FromFileContents(File.ReadAllBytes(filename));
 
-        private static (Builder Head, string Body) FromHelloFile(NameValueCollection requestParams)
+        private static (Builder Head, byte[] Body) FromHelloFile(Request request, bool tryToReplaceFromRequest)
         {
-            var file = File.ReadAllText(HelloFilename)
-                .TryReplaceEncoded("{{Hello}}", requestParams["greeting"])
-                .TryReplaceEncoded("{{World}}", requestParams["name"]);
-            return FromFileContents(file);
+            const string name = nameof(name);
+            const string greeting = "{{Hello}}";
+            const string world = "{{World}}";
+
+            var nameFromRequest = request.RequestParams[name];
+            var encodedName = HttpUtility.HtmlEncode(nameFromRequest);
+            var file = File.ReadAllText(HelloFilename);
+            var replacedName = false;
+
+            if (tryToReplaceFromRequest)
+                file = file
+                    .TryReplaceEncoded(greeting, request.RequestParams[nameof(greeting)])
+                    .TryReplace(world, encodedName, out replacedName);
+
+            if (!replacedName &&
+                request.Headers.FirstOrDefault(h => h.Name == "Cookie" && h.Value.StartsWith(name)) is { } header)
+            {
+                var value = header.Value[5..];
+                file = file.TryReplaceEncoded(world, Encoding.UTF8.GetString(Convert.FromBase64String(value)));
+            }
+                       
+            var result = FromFileContents(Encoding.UTF8.GetBytes(file));
+
+            if (replacedName)
+            {
+                var a = Convert.ToBase64String(Encoding.UTF8.GetBytes(nameFromRequest));
+                result.Head.Append(DefaultHeaders.SetCookie(name, a));
+            }
+
+            return result;
         }
 
-        private static (Builder Head, string Body) FromTimeFile()
+        private static (Builder Head, byte[] Body) FromTimeFile()
         {
             var file = File.ReadAllText("time.template.html")
                 .Replace("{{ServerTime}}", DateTime.Now.ToString());
-            return FromFileContents(file);
+            return FromFileContents(Encoding.UTF8.GetBytes(file));
         }
 
-        private static (Builder Head, string Body) FromFileContents(string fileBytes)
+        private static (Builder Head, byte[] Body) FromFileContents(byte[] fileBytes)
         {
             var head = Builder.ForOk()
                 .Append(DefaultHeaders.HtmlContentType)
@@ -187,7 +214,7 @@ namespace Sockets
             return (head, fileBytes);
         }
 
-        private static (Builder Head, string Body) NotExisingPage() => (Builder.ForNotFound(), string.Empty);
+        private static (Builder Head, byte[] Body) NotExisingPage() => (Builder.ForNotFound(), Array.Empty<byte>());
 
         // Собирает ответ в виде массива байт из байтов строки head и байтов body.
         private static byte[] CreateResponseBytes(Builder head, byte[] body)

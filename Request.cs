@@ -24,6 +24,8 @@ namespace Sockets
         {
             public static Header HtmlContentType => new("Content-Type", "text/html; charset=utf-8");
 
+            public static Header SetCookie(string name, string value) => new("Set-Cookie", name + '=' + value);
+
             public static Header ContentLength(int length) => new("Content-Length", length.ToString());
         }
 
