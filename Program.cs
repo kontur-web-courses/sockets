@@ -162,13 +162,17 @@ namespace Sockets
             var uri = request.RequestUri.Split('?');
             var url = uri[0];
             var query = uri.Length > 1 ? HttpUtility.ParseQueryString(uri[1]) : null;
+            var cookies = ParseCookies(request.Headers.Find(x => x.Name == "Cookie")?.Value);
             if (url == "/" || url == "/hello.html")
             {
                 var html = File.ReadAllText("hello.html");
                 html = html
                     .Replace("{{Hello}}", HttpUtility.HtmlEncode(query?["greeting"] ?? "Hello"))
-                    .Replace("{{World}}", HttpUtility.HtmlEncode(query?["name"] ?? "World"));
-                return CreateResponseBytes(new StringBuilder($"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {html.Length}\r\n\r\n"), Encoding.UTF8.GetBytes(html));
+                    .Replace("{{World}}", HttpUtility.HtmlEncode(query?["name"] ?? HttpUtility.UrlDecode(cookies.GetValueOrDefault("name")) ?? "World"));
+                var head = new StringBuilder($"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {html.Length}\r\n");
+                if (query?["name"] is not null) head = head.Append($"Set-Cookie: name={HttpUtility.UrlEncode(query["name"])}\r\n");
+                head = head.Append("\r\n");
+                return CreateResponseBytes(head, Encoding.UTF8.GetBytes(html));
             }
             if (url == "/groot.gif")
                 return CreateResponseBytes(new StringBuilder("HTTP/1.1 200 OK\r\nContent-Type: image/gif; charset=utf-8\r\nContent-Length: 749699\r\n\r\n"), File.ReadAllBytes("groot.gif"));
@@ -178,6 +182,34 @@ namespace Sockets
                 return CreateResponseBytes(new StringBuilder($"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {html.Length}\r\n\r\n"), Encoding.UTF8.GetBytes(html));
             }
             return CreateResponseBytes(new StringBuilder("HTTP/1.1 404 Not Found\r\n\r\n"), new byte[0]);
+        }
+
+        private static Dictionary<string, string> ParseCookies(string cookiesString)
+        {
+            var cookieDictionary = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            if (string.IsNullOrWhiteSpace(cookiesString))
+                return cookieDictionary;
+
+            var values = cookiesString.Split(';', StringSplitOptions.RemoveEmptyEntries);
+            foreach (var parts in values.Select(c => c.Split('=', 2)))
+            {
+                var cookieName = parts[0].Trim();
+                string cookieValue;
+
+                if (parts.Length == 1)
+                {
+                    cookieValue = string.Empty;
+                }
+                else
+                {
+                    cookieValue = parts[1];
+                }
+
+                cookieDictionary[cookieName] = cookieValue;
+            }
+
+            return cookieDictionary;
         }
 
         // Собирает ответ в виде массива байт из байтов строки head и байтов body.
