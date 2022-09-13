@@ -178,6 +178,7 @@ namespace Sockets
                 case "/time.html":
                     body = Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(File.ReadAllBytes("time.template.html")).Replace("{{ServerTime}}", $"{DateTime.Now}"));
                     head.Append("Content-Type: text/html; charset=utf-8\r\n");
+                    break;
                 
                 default:
                     head = new StringBuilder("HTTP/1.1 404 Not Found\r\n");
