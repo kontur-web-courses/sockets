@@ -159,14 +159,45 @@ namespace Sockets
 
         private static byte[] ProcessRequest(Request request)
         {
-            var requestUri = request.RequestUri;
-            var body = new byte[0];
+            var uriAndQuery = request.RequestUri.Split("?");
+            var requestUri = uriAndQuery[0];
+            var queries = "";
+            if (uriAndQuery.Length > 1)
+            {
+                queries = uriAndQuery[1];
+            }
+
+            var body = Array.Empty<byte>();
             var head = new StringBuilder("HTTP/1.1 200 OK\r\n");
             
             switch (requestUri)
             {
                 case "/" or "/hello.html":
-                    body = File.ReadAllBytes("hello.html");
+                    var queriesCollection = HttpUtility.ParseQueryString(queries);
+                    var htmlString = Encoding.UTF8.GetString(File.ReadAllBytes("hello.html"));
+                    
+                    var newGreeting = HttpUtility.HtmlEncode(queriesCollection["greeting"]);
+                    var newName = HttpUtility.HtmlEncode(queriesCollection["name"]);
+
+                    if (newGreeting is not null)
+                        htmlString = htmlString.Replace("{{Hello}}", newGreeting);
+
+                    if (newName is not null)
+                    {
+                        htmlString = htmlString.Replace("{{World}}", newName);
+                        head.Append($"Set-Cookie: name={newName};");
+                    }
+
+                    var savedName = request.Headers
+                        .FirstOrDefault(header => header.Name == "Cookie")
+                        ?.Value.Split("=")[1];
+
+                    if (savedName is not null)
+                    {
+                        htmlString = htmlString.Replace("{{World}}", savedName);
+                    }
+                    
+                    body = Encoding.UTF8.GetBytes(htmlString);
                     head.Append("Content-Type: text/html; charset=utf-8\r\n");
                     break;
                 
@@ -176,7 +207,9 @@ namespace Sockets
                     break;
 
                 case "/time.html":
-                    body = Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(File.ReadAllBytes("time.template.html")).Replace("{{ServerTime}}", $"{DateTime.Now}"));
+                    htmlString = Encoding.UTF8.GetString(File.ReadAllBytes("time.template.html"));
+                    body = Encoding.UTF8.GetBytes(htmlString
+                        .Replace("{{ServerTime}}", $"{DateTime.Now}"));
                     head.Append("Content-Type: text/html; charset=utf-8\r\n");
                     break;
                 
