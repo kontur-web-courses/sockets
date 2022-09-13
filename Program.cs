@@ -159,12 +159,19 @@ namespace Sockets
 
         private static byte[] ProcessRequest(Request request)
         {
+            var requestUri = request.RequestUri;
+            var body = new byte[0];
+            var head = new StringBuilder("HTTP/1.1 404 Not Found\r\n");
             
-            var head = new StringBuilder("OK");
-            var body = "HTTP/1.1 404 Not Found"
-                .ToCharArray()
-                .Select(x => (byte)x)
-                .ToArray();
+            if (requestUri is "/" or "/hello.html")
+            {
+                body = File.ReadAllBytes("hello.html");
+
+                head = new StringBuilder("HTTP/1.1 200 OK\r\n");
+                head.Append("Content-Type: text/html; charset=utf-8\r\n");
+                head.Append($"Content-Length: {body.Length}\r\n\r\n");
+            }
+            
             return CreateResponseBytes(head, body);
         }
 
