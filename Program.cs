@@ -161,15 +161,24 @@ namespace Sockets
         {
             var head = "";
             var body = Encoding.UTF8.GetBytes("HTTP/1.1 404 Not Found\r\n\r\n");
-            if (request.RequestUri is "/" or "/hello.html")
+            switch (request.RequestUri)
             {
-                body = File.ReadAllBytes("hello.html");
-                head = $"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {body.Length}\r\n\r\n";
-            }
-            else if (request.RequestUri == "/groot.gif")
-            {
-                body = File.ReadAllBytes("groot.gif");
-                head = $"HTTP/1.1 200 OK\r\nContent-Type: image/gif; charset=utf-8\r\nContent-Length: {body.Length}\r\n\r\n";
+                case "/" or "/hello.html":
+                    body = File.ReadAllBytes("hello.html");
+                    head = $"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {body.Length}\r\n\r\n";
+                    break;
+                case "/groot.gif":
+                    body = File.ReadAllBytes("groot.gif");
+                    head = $"HTTP/1.1 200 OK\r\nContent-Type: image/gif; charset=utf-8\r\nContent-Length: {body.Length}\r\n\r\n";
+                    break;
+                case "/time.html":
+                    var pattern = File.ReadAllText("time.template.html");
+                    var page = pattern.Replace(
+                        "{{ServerTime}}",
+                        DateTime.Now.ToString(CultureInfo.InvariantCulture));
+                    body = Encoding.UTF8.GetBytes(page);
+                    head = $"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {body.Length}\r\n\r\n";
+                    break;
             }
             return CreateResponseBytes(head, body);
         }
