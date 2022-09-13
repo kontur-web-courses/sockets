@@ -161,19 +161,28 @@ namespace Sockets
         {
             var requestUri = request.RequestUri;
             var body = new byte[0];
-            var head = new StringBuilder("HTTP/1.1 404 Not Found\r\n");
+            var head = new StringBuilder();
             
             switch (requestUri)
             {
                 case "/" or "/hello.html":
                     body = File.ReadAllBytes("hello.html");
 
-                    head = new StringBuilder("HTTP/1.1 200 OK\r\n");
+                    head.Append("HTTP/1.1 200 OK\r\n");
                     head.Append("Content-Type: text/html; charset=utf-8\r\n");
                     head.Append($"Content-Length: {body.Length}\r\n\r\n");
                     break;
                 case "/groot.gif":
-                    throw new NotImplementedException();
+                    body = File.ReadAllBytes("groot.gif");
+                    
+                    head.Append("HTTP/1.1 200 OK\r\n");
+                    head.Append("Content-Type: image/gif; charset=utf-8\r\n");
+                    head.Append($"Content-Length: {body.Length}\r\n\r\n");
+                    break;
+                
+                default:
+                    head.Append("HTTP/1.1 404 Not Found\r\n");
+                    break;
             }
             
             return CreateResponseBytes(head, body);
