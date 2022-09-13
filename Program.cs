@@ -159,8 +159,12 @@ namespace Sockets
 
         private static byte[] ProcessRequest(Request request)
         {
-            if (request.RequestUri.Equals("/") || request.RequestUri.Contains("/hello.html"))
+            if (request.RequestUri.Equals("/")
+                || request.RequestUri.Contains("/?")
+                || request.RequestUri.Contains("/hello.html"))
+            {
                 return CreateQueryResponse(request);
+            }
             if (request.RequestUri.Equals("/groot.gif"))
                 return CreateGifResponse();
             if (request.RequestUri.Equals("/time.html"))
