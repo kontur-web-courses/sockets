@@ -166,6 +166,11 @@ namespace Sockets
                 body = File.ReadAllBytes("hello.html");
                 head = $"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {body.Length}\r\n\r\n";
             }
+            else if (request.RequestUri == "/groot.gif")
+            {
+                body = File.ReadAllBytes("groot.gif");
+                head = $"HTTP/1.1 200 OK\r\nContent-Type: image/gif; charset=utf-8\r\nContent-Length: {body.Length}\r\n\r\n";
+            }
             return CreateResponseBytes(head, body);
         }
 
