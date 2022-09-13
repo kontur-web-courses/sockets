@@ -1,59 +1,46 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Collections.Specialized;
-using System.Globalization;
-using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
-using System.Web;
 
 namespace Sockets
 {
-    class Program
+    internal class Program
     {
-        static void Main(string[] args)
-        {
-            AsynchronousSocketListener.StartListening();
-        }
+        static void Main(string[] args) => AsynchronousSocketListener.StartListening();
     }
 
-    public class AsynchronousSocketListener
+    internal class AsynchronousSocketListener
     {
         private const int listeningPort = 11000;
-        private static ManualResetEvent connectionEstablished = new ManualResetEvent(false);
-
-        private class ReceivingState
-        {
-            public Socket ClientSocket;
-            public const int BufferSize = 1024;
-            public readonly byte[] Buffer = new byte[BufferSize];
-            public readonly List<byte> ReceivedData = new List<byte>();
-        }
+        private static ManualResetEvent connectionEstablished = new(false);
 
         public static void StartListening()
         {
             // Определяем IP-адрес, по которому будем принимать сообщения.
             // Для этого сначала получаем DNS-имя компьютера,
             // а из всех адресов выбираем первый попавшийся IPv4 адрес.
-            string hostName = Dns.GetHostName();
-            IPHostEntry ipHostEntry = Dns.GetHostEntry(hostName);
-            IPAddress ipV4Address = ipHostEntry.AddressList
+            var hostName = Dns.GetHostName();
+            var ipHostEntry = Dns.GetHostEntry(hostName);
+            var ipV4Address = ipHostEntry.AddressList
                 .Where(address => address.AddressFamily == AddressFamily.InterNetwork)
                 .OrderBy(address => address.ToString())
                 .FirstOrDefault();
+
             if (ipV4Address == null)
             {
                 Console.WriteLine(">>> Can't find IPv4 address for host");
                 return;
             }
+            
             // По выбранному IP-адресу будем слушать listeningPort.
-            IPEndPoint ipEndPoint = new IPEndPoint(ipV4Address, listeningPort);
+            var ipEndPoint = new IPEndPoint(ipV4Address, listeningPort);
 
             // Создаем TCP/IP сокет для приема соединений.
-            Socket connectionSocket = new Socket(ipV4Address.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+            var connectionSocket = new Socket(ipV4Address.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
 
             try
             {
@@ -63,8 +50,7 @@ namespace Sockets
                 connectionSocket.Listen(100);
 
                 // Принимаем входящие соединения.
-                while (true)
-                    Accept(connectionSocket);
+                while (true) Accept(connectionSocket);
             }
             catch (Exception e)
             {
@@ -98,9 +84,9 @@ namespace Sockets
             connectionEstablished.Set();
 
             // Получаем сокет к клиенту, с которым установлено соединение.
-            Socket connectionSocket = (Socket)asyncResult.AsyncState;
-            Socket clientSocket = connectionSocket.EndAccept(asyncResult);
-
+            var connectionSocket = (Socket)asyncResult.AsyncState;
+            var clientSocket = connectionSocket.EndAccept(asyncResult);
+            
             // Принимаем данные от клиента.
             Receive(clientSocket);
         }
@@ -108,8 +94,8 @@ namespace Sockets
         private static void Receive(Socket clientSocket)
         {
             // Создаем объект для callback.
-            ReceivingState receivingState = new ReceivingState();
-            receivingState.ClientSocket = clientSocket;
+            var receivingState = new ReceivingState() {ClientSocket = clientSocket};
+
             // Начинаем асинхронно получать данные от клиента.
             // Передаем буфер, куда будут складываться полученные байты.
             clientSocket.BeginReceive(receivingState.Buffer, 0, ReceivingState.BufferSize, SocketFlags.None,
@@ -119,11 +105,11 @@ namespace Sockets
         private static void ReceiveCallback(IAsyncResult asyncResult)
         {
             // Достаем клиентский сокет из параметра callback.
-            ReceivingState receivingState = (ReceivingState)asyncResult.AsyncState;
-            Socket clientSocket = receivingState.ClientSocket;
+            var receivingState = (ReceivingState)asyncResult.AsyncState;
+            var clientSocket = receivingState.ClientSocket;
 
             // Читаем данные из клиентского сокета.
-            int bytesReceived = clientSocket.EndReceive(asyncResult);
+            var bytesReceived = clientSocket.EndReceive(asyncResult);
 
             if (bytesReceived > 0)
             {
@@ -132,16 +118,9 @@ namespace Sockets
                 receivingState.ReceivedData.AddRange(receivingState.Buffer.Take(bytesReceived));
 
                 // Пытаемся распарсить Request из полученных данных.
-                byte[] receivedBytes = receivingState.ReceivedData.ToArray();
-                Request request = Request.StupidParse(receivedBytes);
-                if (request == null)
-                {
-                    // request не распарсился, значит получили не все данные.
-                    // Запрашиваем еще.
-                    clientSocket.BeginReceive(receivingState.Buffer, 0, ReceivingState.BufferSize, SocketFlags.None,
-                        ReceiveCallback, receivingState);
-                }
-                else
+                var receivedBytes = receivingState.ReceivedData.ToArray();
+
+                if (Request.StupidParse(receivedBytes) is { } request)
                 {
                     // Все данные были получены от клиента.
                     // Для удобства выведем их на консоль.
@@ -149,10 +128,17 @@ namespace Sockets
                         Encoding.ASCII.GetString(receivedBytes));
 
                     // Сформируем ответ.
-                    byte[] responseBytes = ProcessRequest(request);
+                    var responseBytes = ProcessRequest(request);
 
                     // Отправим ответ клиенту.
                     Send(clientSocket, responseBytes);
+                }
+                else
+                {
+                    // request не распарсился, значит получили не все данные.
+                    // Запрашиваем еще.
+                    clientSocket.BeginReceive(receivingState.Buffer, 0, ReceivingState.BufferSize, SocketFlags.None,
+                        ReceiveCallback, receivingState);
                 }
             }
         }
@@ -168,8 +154,8 @@ namespace Sockets
         // Собирает ответ в виде массива байт из байтов строки head и байтов body.
         private static byte[] CreateResponseBytes(StringBuilder head, byte[] body)
         {
-            byte[] headBytes = Encoding.ASCII.GetBytes(head.ToString());
-            byte[] responseBytes = new byte[headBytes.Length + body.Length];
+            var headBytes = Encoding.ASCII.GetBytes(head.ToString());
+            var responseBytes = new byte[headBytes.Length + body.Length];
             Array.Copy(headBytes, responseBytes, headBytes.Length);
             Array.Copy(body, 0,
                 responseBytes, headBytes.Length,
@@ -188,11 +174,11 @@ namespace Sockets
         private static void SendCallback(IAsyncResult asyncResult)
         {
             // Достаем клиентский сокет из параметра callback.
-            Socket clientSocket = (Socket)asyncResult.AsyncState;
+            var clientSocket = (Socket)asyncResult.AsyncState;
             try
             {
                 // Завершаем отправку данных клиенту.
-                int bytesSent = clientSocket.EndSend(asyncResult);
+                var bytesSent = clientSocket.EndSend(asyncResult);
                 Console.WriteLine(">>> Sent {0} bytes to client.", bytesSent);
 
                 // Закрываем соединение.
@@ -206,6 +192,14 @@ namespace Sockets
                 Console.WriteLine(e.ToString());
                 Console.WriteLine(">>> ");
             }
+        }
+
+        private class ReceivingState
+        {
+            public Socket ClientSocket;
+            public const int BufferSize = 1024;
+            public readonly byte[] Buffer = new byte[BufferSize];
+            public readonly List<byte> ReceivedData = new List<byte>();
         }
     }
 }

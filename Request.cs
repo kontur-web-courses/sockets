@@ -19,11 +19,7 @@ namespace Sockets
 
         public class Header
         {
-            public Header(string name, string value)
-            {
-                Name = name;
-                Value = value;
-            }
+            public Header(string name, string value) => (Name, Value) = (name, value);
 
             public readonly string Name;
             public readonly string Value;
@@ -32,18 +28,16 @@ namespace Sockets
         // Структура http-запроса: https://www.w3.org/Protocols/rfc2616/rfc2616-sec5.html
         public static Request StupidParse(byte[] requestBytes)
         {
-            string requestString = Encoding.ASCII.GetString(requestBytes);
+            var requestString = Encoding.ASCII.GetString(requestBytes);
+            var requestLine = ParseRequestLine(requestString, out int readCharsCount);
+            var headers = ParseHeaders(requestString, ref readCharsCount);
 
-            RequestLine requestLine = ParseRequestLine(requestString, out int readCharsCount);
+            if (headers == null) return null;
 
-            List<Header> headers = ParseHeaders(requestString, ref readCharsCount);
-            if (headers == null)
-                return null;
+            var readBytesCount = Encoding.ASCII.GetBytes(requestString.Substring(0, readCharsCount)).Length;
+            var messageBody = ParseMessageBody(requestBytes, headers, readBytesCount);
 
-            int readBytesCount = Encoding.ASCII.GetBytes(requestString.Substring(0, readCharsCount)).Length;
-            byte[] messageBody = ParseMessageBody(requestBytes, headers, readBytesCount);
-            if (messageBody == null)
-                return null;
+            if (messageBody == null) return null;
 
             return new Request
             {
@@ -58,33 +52,33 @@ namespace Sockets
         private static RequestLine ParseRequestLine(string requestString, out int readCharsCount)
         {
             readCharsCount = 0;
-            int lineEnd = requestString.IndexOf(HttpLineSeparator, StringComparison.InvariantCulture);
-            if (lineEnd < 0)
-                return null;
+            var lineEnd = requestString.IndexOf(HttpLineSeparator, StringComparison.InvariantCulture);
+
+            if (lineEnd < 0) return null;
 
             readCharsCount = lineEnd + 2;
-            string requestLineString = requestString.Substring(0, lineEnd);
-            string[] requestLineParts = requestLineString.Split(' ');
+            var requestLineString = requestString.Substring(0, lineEnd);
+            var requestLineParts = requestLineString.Split(' ');
             return new RequestLine(requestLineParts[0], requestLineParts[1], requestLineParts[2]);
         }
 
         private static List<Header> ParseHeaders(string requestString, ref int readCharsCount)
         {
-            int lineStart = readCharsCount;
+            var lineStart = readCharsCount;
+            var headers = new List<Header>();
 
-            List<Header> headers = new List<Header>();
             while (true)
             {
-                if (lineStart >= requestString.Length)
-                    return null;
-                int lineEnd = requestString.IndexOf(HttpLineSeparator, lineStart, StringComparison.InvariantCulture);
-                if (lineEnd < 0)
-                    return null;
-                if (lineStart == lineEnd)
-                    break;
+                if (lineStart >= requestString.Length) return null;
+                
+                var lineEnd = requestString.IndexOf(HttpLineSeparator, lineStart, StringComparison.InvariantCulture);
+                
+                if (lineEnd < 0) return null;
+                
+                if (lineStart == lineEnd) break;
 
-                string headerString = requestString.Substring(lineStart, lineEnd - lineStart);
-                string[] headerParts = headerString.Split(':');
+                var headerString = requestString.Substring(lineStart, lineEnd - lineStart);
+                var headerParts = headerString.Split(':');
                 headers.Add(new Header(headerParts[0].Trim(), headerParts[1].Trim()));
 
                 lineStart = lineEnd + HttpLineSeparator.Length;
@@ -96,36 +90,24 @@ namespace Sockets
 
         private static byte[] ParseMessageBody(byte[] requestBytes, List<Header> headers, int readBytesCount)
         {
-            int? contentLength = FindContentLength(headers);
-            int messageBodyLength = contentLength.HasValue ? contentLength.Value : requestBytes.Length - readBytesCount;
-            if (messageBodyLength > requestBytes.Length - readBytesCount)
-                return null;
+            var contentLength = FindContentLength(headers);
+            var messageBodyLength = contentLength.HasValue ? contentLength.Value : requestBytes.Length - readBytesCount;
+            
+            if (messageBodyLength > requestBytes.Length - readBytesCount) return null;
 
-            byte[] messageBody = new byte[messageBodyLength];
+            var messageBody = new byte[messageBodyLength];
             Array.Copy(requestBytes, readBytesCount, messageBody, 0, messageBody.Length);
             return messageBody;
         }
 
         private static int? FindContentLength(List<Header> headers)
         {
-            Header contentLengthHeader = headers.FirstOrDefault(
+            var contentLengthHeader = headers.FirstOrDefault(
                 h => string.Equals(h.Name, "Content-Length", StringComparison.InvariantCultureIgnoreCase));
             return contentLengthHeader != null ? (int?)int.Parse(contentLengthHeader.Value) : null;
         }
 
-        private class RequestLine
-        {
-            public RequestLine(string method, string requestUri, string httpVersion)
-            {
-                Method = method;
-                RequestUri = requestUri;
-                HttpVersion = httpVersion;
-            }
-
-            public readonly string Method;
-            public readonly string RequestUri;
-            public readonly string HttpVersion;
-        }
+        private record RequestLine(string Method, string RequestUri, string HttpVersion);
     }
 
     [TestFixture]
