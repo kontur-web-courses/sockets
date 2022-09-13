@@ -159,11 +159,81 @@ namespace Sockets
 
         private static byte[] ProcessRequest(Request request)
         {
-            // TODO
-            var head = new StringBuilder("OK");
-            var body = new byte[0];
-            return CreateResponseBytes(head, body);
+            var separatedRelativeUri = request.RequestUri.Split('?');
+            var pagePath = separatedRelativeUri.First();
+            var queryParams = HttpUtility.ParseQueryString(separatedRelativeUri.Last());
+            var cookie = ParseCookie(request.Headers.FirstOrDefault(h => h.Name == "Cookie")?.Value);
+            var name = queryParams["name"] ?? cookie["name"] ??  "{{World}}";
+            var greeting = queryParams["greeting"] ?? cookie["greeting"] ?? "{{Hello}}";
+            
+            switch (pagePath)
+            {
+                case "/":
+                case "/hello.html":
+                    return CreateResponseBytes(
+                        GetOkResponseHeader(ContentTypes.Utf8Html, queryParams),
+                        GetHelloPage(name, greeting));
+                case "/groot.gif":
+                    return CreateResponseBytes(
+                        GetOkResponseHeader(ContentTypes.Gif), File.ReadAllBytes("groot.gif"));
+                case "/time.html":
+                    return CreateResponseBytes(
+                        GetOkResponseHeader(ContentTypes.Utf8Html), GetDynamicServerTimePage());
+                default:
+                    return Encoding.ASCII.GetBytes("HTTP/1.1 404 Not Found"); 
+            }
         }
+
+        private static NameValueCollection ParseCookie(string cookieValue)
+        {
+            var cookieCollection = new NameValueCollection();
+            foreach (var keyValuePair in cookieValue.Split(";"))
+            {
+                cookieCollection.Add(
+                    keyValuePair.Split('=').First().Trim(),
+                    keyValuePair.Split('=').Last().Trim());
+            }
+
+            return cookieCollection;
+        }
+
+        private static byte[] GetHelloPage(string name, string greeting)
+        {
+            var helloPage = Encoding.UTF8.GetString(File.ReadAllBytes("hello.html"));
+            var replacedGreetingPage = helloPage.Replace("{{Hello}}", HttpUtility.HtmlEncode(greeting));
+            var replacedNamePage = replacedGreetingPage.Replace("{{World}}", HttpUtility.HtmlEncode(name));
+            return Encoding.UTF8.GetBytes(replacedNamePage);
+        }
+        
+        private static byte[] GetDynamicServerTimePage()
+        {
+            var timePage = Encoding.UTF8.GetString(File.ReadAllBytes("time.template.html"));
+            var currentTimePage = timePage.Replace("{{ServerTime}}", $"{DateTime.Now}");
+            return Encoding.UTF8.GetBytes(currentTimePage);
+        }
+
+        private static void SetCookieHeader(StringBuilder header, NameValueCollection queryParams)
+        {
+            var nameParam = queryParams["name"];
+            var greetingParam = queryParams["greeting"];
+            if (nameParam != null)
+                SetHeader(header, $"Set-Cookie: name={nameParam}");
+            if (greetingParam != null)
+                SetHeader(header, $"Set-Cookie: greeting={greetingParam}");
+        }
+        
+        private static StringBuilder GetOkResponseHeader(string contentType, NameValueCollection queryParams=null)
+        {
+            var header = new StringBuilder();
+            SetHeader(header, "HTTP/1.1 200 OK");
+            SetHeader(header, $"Content-Type: {contentType}");
+            SetHeader(header, "Content-Length: 100500");
+            SetCookieHeader(header, queryParams ?? new NameValueCollection());
+            header.Append("\r\n");
+            return header;
+        }
+
+        private static void SetHeader(StringBuilder header, string value) => header.Append($"{value}\r\n"); 
 
         // Собирает ответ в виде массива байт из байтов строки head и байтов body.
         private static byte[] CreateResponseBytes(StringBuilder head, byte[] body)
