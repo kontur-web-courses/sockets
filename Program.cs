@@ -211,34 +211,52 @@ namespace Sockets
                         var html = new StringBuilder(File.ReadAllText("hello.html"))
                             .Replace("{{Hello}}", HttpUtility.HtmlEncode(request.Query?["greeting"] ?? "Hello"))
                             .Replace("{{World}}", HttpUtility.HtmlEncode(request.Query?["name"] ?? HttpUtility.UrlDecode(request.Cookies.GetValueOrDefault("name")) ?? "World"));
-                        var head = new StringBuilder($"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {html.Length}\r\n");
-                        if (request.Query?["name"] is not null) head = head.Append($"Set-Cookie: name={HttpUtility.UrlEncode(request.Query["name"])}\r\n");
-                        head = head.Append("\r\n");
-                        return CreateResponseBytes(head, Encoding.UTF8.GetBytes(html.ToString()));
+                        var bodyBytes = Encoding.UTF8.GetBytes(html.ToString());
+                        return CreateResponseBytes(200,
+                            contentType: "text/html; charset=utf-8", body: bodyBytes,
+                            cookie: request.Query?["name"] is not null 
+                                ? $"name={HttpUtility.UrlEncode(request.Query["name"])}"
+                                : null);
                     }
 
                 case "/groot.gif":
-                    return CreateResponseBytes(new StringBuilder("HTTP/1.1 200 OK\r\nContent-Type: image/gif; charset=utf-8\r\nContent-Length: 749699\r\n\r\n"), File.ReadAllBytes("groot.gif"));
+                    return CreateResponseBytes(200, "image/gif", File.ReadAllBytes("groot.gif"));
                 case "/time.html":
                     {
                         var html = File.ReadAllText("time.template.html").Replace("{{ServerTime}}", DateTime.Now.ToString());
-                        return CreateResponseBytes(new StringBuilder($"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {html.Length}\r\n\r\n"), Encoding.UTF8.GetBytes(html));
+                        return CreateResponseBytes(200, "text/html; charset=utf-8", Encoding.UTF8.GetBytes(html));
                     }
 
                 default:
-                    return CreateResponseBytes(new StringBuilder("HTTP/1.1 404 Not Found\r\n\r\n"), new byte[0]);
+                    return CreateResponseBytes(404);
             }
         }
 
-        // Собирает ответ в виде массива байт из байтов строки head и байтов body.
-        private static byte[] CreateResponseBytes(StringBuilder head, byte[] body)
+        private static byte[] CreateResponseBytes(int statusCode, string contentType = null, byte[] body = null, string cookie = null)
         {
-            byte[] headBytes = Encoding.ASCII.GetBytes(head.ToString());
-            byte[] responseBytes = new byte[headBytes.Length + body.Length];
+            return statusCode switch
+            {
+                200 => CreateResponseBytes(
+                    $"HTTP/1.1 200 OK\r\n" +
+                    $"Content-Type: {contentType}; charset=utf-8\r\n" +
+                    $"Content-Length: {body?.Length ?? 0}\r\n" +
+                    $"Set-Cookie: {cookie ?? string.Empty}\r\n" +
+                    $"\r\n", body),
+                404 => CreateResponseBytes("HTTP/1.1 404 Not Found\r\n\r\n", null),
+                _ => throw new NotImplementedException()
+            };
+        }
+
+        // Собирает ответ в виде массива байт из байтов строки head и байтов body.
+        private static byte[] CreateResponseBytes(string head, byte[] body = null)
+        {
+            byte[] headBytes = Encoding.ASCII.GetBytes(head);
+            byte[] responseBytes = new byte[headBytes.Length + (body?.Length ?? 0)];
             Array.Copy(headBytes, responseBytes, headBytes.Length);
-            Array.Copy(body, 0,
-                responseBytes, headBytes.Length,
-                body.Length);
+            if (body is not null)
+                Array.Copy(body, 0,
+                    responseBytes, headBytes.Length,
+                    body.Length);
             return responseBytes;
         }
 
