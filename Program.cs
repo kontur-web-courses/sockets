@@ -168,7 +168,7 @@ namespace Sockets
                     break;
                 case "/groot.gif":
                     body = File.ReadAllBytes("groot.gif");
-                    head = $"HTTP/1.1 200 OK\r\nContent-Type: image/gif; charset=utf-8\r\nContent-Length: {body.Length}\r\n\r\n";
+                    head = $"HTTP/1.1 200 OK\r\nContent-Type: image/gif; charset=utf-8\r\nContent-Length: {body.Length}\r\n";
                     break;
                 case "/time.html":
                     var pattern = File.ReadAllText("time.template.html");
@@ -176,20 +176,32 @@ namespace Sockets
                         "{{ServerTime}}",
                         DateTime.Now.ToString(CultureInfo.InvariantCulture));
                     body = Encoding.UTF8.GetBytes(page);
-                    head = $"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {body.Length}\r\n\r\n";
+                    head = $"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {body.Length}\r\n";
                     break;
             }
+
+            head += "\r\n";
             return CreateResponseBytes(head, body);
         }
 
         private static (string head, byte[] body) ProcessHelloRequest(Request request)
         {
             var body = File.ReadAllText("hello.html");
-            var head = $"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {body.Length}\r\n\r\n";
+            var head = $"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {body.Length}\r\n";
             var splited = request.RequestUri.Split('?');
             if (splited.Length < 2)
                 return (head, Encoding.UTF8.GetBytes(body));
             var parameters = HttpUtility.ParseQueryString(splited[1]);
+            var cookiesString = request.Headers.FirstOrDefault(x => x.Name == "Cookie")?.Value;
+            var nameValue = cookiesString?
+                .Split("; ")
+                .Select(x => (x.Split("=")[0], x.Split("=")[1]))
+                .FirstOrDefault(x => x.Item1 == "name")
+                .Item2;
+            if (nameValue != null)
+            {
+                head += $"Set-Cookie: {nameValue}\r\n";
+            }
             if (parameters["greeting"] is { } greeting)
             {
                 body = body.Replace("{{Hello}}", HttpUtility.HtmlEncode(greeting));
@@ -198,6 +210,7 @@ namespace Sockets
             if (parameters["name"] is { } name)
             {
                 body = body.Replace("{{World}}", HttpUtility.HtmlEncode(name));
+                head += $"Set-Cookie: {nameValue}\r\n";
             }
 
             return (head, Encoding.UTF8.GetBytes(body));
