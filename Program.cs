@@ -159,9 +159,12 @@ namespace Sockets
 
         private static byte[] ProcessRequest(Request request)
         {
-            // TODO
+            
             var head = new StringBuilder("OK");
-            var body = new byte[0];
+            var body = "HTTP/1.1 404 Not Found"
+                .ToCharArray()
+                .Select(x => (byte)x)
+                .ToArray();
             return CreateResponseBytes(head, body);
         }
 
