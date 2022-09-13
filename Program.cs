@@ -157,11 +157,82 @@ namespace Sockets
             }
         }
 
+        private static byte[] RemoveFigureBrackets(byte[] page)
+        {
+            return Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(page)
+                .Replace("{{World}}", "World")
+                .Replace("{{Hello}}", "Hello"));
+        }
+
         private static byte[] ProcessRequest(Request request)
         {
-            // TODO
-            var head = new StringBuilder("OK");
-            var body = new byte[0];
+            //return Encoding.ASCII.GetBytes("HTTP/1.1 404 Not Found\r\n");
+            byte[] page = new byte[0];
+            string contentType = "text/html";
+            string cookie = "";
+            if (request.RequestUri == "/" || request.RequestUri == "/hello.html")
+            {
+                var recievedCookie = request.Headers.FirstOrDefault(h => h.Name == "Cookie");
+
+                page = RemoveFigureBrackets(File.ReadAllBytes("hello.html"));
+                if (recievedCookie is not null)
+                {
+                    var cookies = recievedCookie.Value.Split(';', StringSplitOptions.TrimEntries)
+                        .Select(kv =>
+                        {
+                            var splitted = kv.Split('=', 2);
+                            var key = splitted[0];
+                            var value = splitted[1];
+                            return (key, value);
+                        })
+                        .ToDictionary(kv => kv.key, kv => kv.value);
+                    if (cookies.TryGetValue("name", out var value))
+                    {
+                        var decodedName = Encoding.UTF8.GetString(Convert.FromBase64String(value));
+                        page = Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(page).Replace("World", decodedName));
+                    }
+                }
+                contentType = "text/html";
+            }
+            else if (request.RequestUri.StartsWith("/hello.html"))
+            {
+                var collection = HttpUtility.ParseQueryString(request.RequestUri.Split('?', 2)[1]);
+                var greeting = collection["greeting"];
+
+                var decodedString = Encoding.UTF8.GetString(RemoveFigureBrackets(File.ReadAllBytes("hello.html")));
+                if (greeting is not null)
+                {
+                    decodedString = decodedString.Replace("Hello", HttpUtility.HtmlEncode(greeting));
+                }
+
+                var name = collection["name"];
+                if (name is not null)
+                {
+                    cookie = $"\r\nSet-Cookie: name={Convert.ToBase64String(Encoding.UTF8.GetBytes(name))};";
+                    decodedString = decodedString.Replace("World", HttpUtility.HtmlEncode(name));
+                }
+
+                contentType = "text/html";
+                page = Encoding.UTF8.GetBytes(decodedString);
+            }
+            else if (request.RequestUri == "/groot.gif")
+            {
+                page = File.ReadAllBytes("groot.gif");
+                contentType = "image/gif";
+            }
+            else if (request.RequestUri == "/time.html")
+            {
+                var bytes = Encoding.UTF8.GetString(File.ReadAllBytes("time.template.html")).Replace("{{ServerTime}}", $"{DateTime.Now}");
+                page = Encoding.UTF8.GetBytes(bytes);
+                contentType = "text/html";
+            }
+
+            var body = page;
+            var head = new StringBuilder(@$"HTTP/1.1 200 OK
+Content-Type: {contentType}; charset=utf-8;
+Content-Length: {body.Length};{cookie}
+
+");
             return CreateResponseBytes(head, body);
         }
 
