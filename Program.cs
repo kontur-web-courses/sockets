@@ -49,6 +49,7 @@ namespace Sockets
                 Console.WriteLine(">>> Can't find IPv4 address for host");
                 return;
             }
+
             // По выбранному IP-адресу будем слушать listeningPort.
             IPEndPoint ipEndPoint = new IPEndPoint(ipV4Address, listeningPort);
 
@@ -145,7 +146,8 @@ namespace Sockets
                 {
                     // Все данные были получены от клиента.
                     // Для удобства выведем их на консоль.
-                    Console.WriteLine($">>> Received {receivedBytes.Length} bytes from {clientSocket.RemoteEndPoint}. Data:\n" +
+                    Console.WriteLine(
+                        $">>> Received {receivedBytes.Length} bytes from {clientSocket.RemoteEndPoint}. Data:\n" +
                         Encoding.ASCII.GetString(receivedBytes));
 
                     // Сформируем ответ.
@@ -160,8 +162,69 @@ namespace Sockets
         private static byte[] ProcessRequest(Request request)
         {
             // TODO
-            var head = new StringBuilder("OK");
-            var body = new byte[0];
+            StringBuilder head;
+            byte[] body;
+            var status = "200 OK";
+            string contentType = "";
+            var split = request.RequestUri.Split("?");
+            var (path, queriesStr) = (split[0], split.Length == 1 ? "" : split[1]);
+            var queries = HttpUtility.ParseQueryString(queriesStr);
+            StringBuilder setCookies = new StringBuilder();
+            if (path is "/" or "/hello.html")
+            {
+                contentType = "text/html";
+                var reqCookies = request.Headers.FirstOrDefault(x => x.Name == "Cookie");
+                string reqVal = reqCookies == null ? "" : reqCookies.Value;
+                NameValueCollection cookies = new NameValueCollection();
+                foreach (var part in reqVal.Split("; "))
+                {
+                    var tmp = part.Split("=");
+                    if (tmp.Length != 2) continue;
+                    cookies.Add(
+                        HttpUtility.HtmlEncode(HttpUtility.UrlDecode(tmp[0])),
+                        HttpUtility.HtmlEncode(HttpUtility.UrlDecode(tmp[1]))
+                    );
+                }
+
+                var template = Encoding.UTF8.GetString(File.ReadAllBytes("hello.html"));
+                var greeting = queries["greeting"] == null
+                    ? cookies["greeting"] == null
+                        ? "Hello"
+                        : cookies["greeting"]
+                    : HttpUtility.HtmlEncode(queries["greeting"]);
+                var name = queries["name"] == null
+                    ? cookies["name"] == null
+                        ? "World"
+                        : cookies["name"]
+                    : HttpUtility.HtmlEncode(queries["name"]);
+                var res = template
+                    .Replace("{{Hello}}", greeting)
+                    .Replace("{{World}}", name);
+                setCookies.Append($"\r\nSet-Cookie: name={HttpUtility.UrlEncode(name)};\r\n");
+                setCookies.Append($"Set-Cookie: greeting={HttpUtility.UrlEncode(greeting)};\r\n");
+                body = Encoding.UTF8.GetBytes(res);
+            }
+            else if (path is "/groot.gif")
+            {
+                contentType = "image/gif";
+                body = File.ReadAllBytes("groot.gif");
+            }
+            else if (path is "/time.html")
+            {
+                contentType = "text/html";
+                var template = Encoding.UTF8.GetString(File.ReadAllBytes("time.template.html"));
+                body = Encoding.UTF8.GetBytes(template.Replace("{{ServerTime}}", DateTime.Now.ToString()));
+            }
+            else
+            {
+                head = new StringBuilder("HTTP/1.1 404 Not Found\r\n");
+                body = new byte[0];
+                return CreateResponseBytes(head, body);
+            }
+
+            string contentLength = body.Length.ToString();
+            head = new StringBuilder(
+                $"HTTP/1.1 {status}\r\nContent-Type: {contentType};{setCookies}charset=utf-8\r\nContent-Length: {contentLength}\r\n\r\n");
             return CreateResponseBytes(head, body);
         }
 
