@@ -203,25 +203,31 @@ namespace Sockets
         private static byte[] ProcessRequest(Request rawRequest)
         {
             var request = new RequestInfo(rawRequest);
-            if (request.Url == "/" || request.Url == "/hello.html")
+            switch (request.Url)
             {
-                var html = File.ReadAllText("hello.html");
-                html = html
-                    .Replace("{{Hello}}", HttpUtility.HtmlEncode(request.Query?["greeting"] ?? "Hello"))
-                    .Replace("{{World}}", HttpUtility.HtmlEncode(request.Query?["name"] ?? HttpUtility.UrlDecode(request.Cookies.GetValueOrDefault("name")) ?? "World"));
-                var head = new StringBuilder($"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {html.Length}\r\n");
-                if (request.Query?["name"] is not null) head = head.Append($"Set-Cookie: name={HttpUtility.UrlEncode(request.Query["name"])}\r\n");
-                head = head.Append("\r\n");
-                return CreateResponseBytes(head, Encoding.UTF8.GetBytes(html));
+                case "/":
+                case "/hello.html":
+                    {
+                        var html = new StringBuilder(File.ReadAllText("hello.html"))
+                            .Replace("{{Hello}}", HttpUtility.HtmlEncode(request.Query?["greeting"] ?? "Hello"))
+                            .Replace("{{World}}", HttpUtility.HtmlEncode(request.Query?["name"] ?? HttpUtility.UrlDecode(request.Cookies.GetValueOrDefault("name")) ?? "World"));
+                        var head = new StringBuilder($"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {html.Length}\r\n");
+                        if (request.Query?["name"] is not null) head = head.Append($"Set-Cookie: name={HttpUtility.UrlEncode(request.Query["name"])}\r\n");
+                        head = head.Append("\r\n");
+                        return CreateResponseBytes(head, Encoding.UTF8.GetBytes(html.ToString()));
+                    }
+
+                case "/groot.gif":
+                    return CreateResponseBytes(new StringBuilder("HTTP/1.1 200 OK\r\nContent-Type: image/gif; charset=utf-8\r\nContent-Length: 749699\r\n\r\n"), File.ReadAllBytes("groot.gif"));
+                case "/time.html":
+                    {
+                        var html = File.ReadAllText("time.template.html").Replace("{{ServerTime}}", DateTime.Now.ToString());
+                        return CreateResponseBytes(new StringBuilder($"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {html.Length}\r\n\r\n"), Encoding.UTF8.GetBytes(html));
+                    }
+
+                default:
+                    return CreateResponseBytes(new StringBuilder("HTTP/1.1 404 Not Found\r\n\r\n"), new byte[0]);
             }
-            if (request.Url == "/groot.gif")
-                return CreateResponseBytes(new StringBuilder("HTTP/1.1 200 OK\r\nContent-Type: image/gif; charset=utf-8\r\nContent-Length: 749699\r\n\r\n"), File.ReadAllBytes("groot.gif"));
-            if (request.Url == "/time.html")
-            {
-                var html = File.ReadAllText("time.template.html").Replace("{{ServerTime}}", DateTime.Now.ToString());
-                return CreateResponseBytes(new StringBuilder($"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {html.Length}\r\n\r\n"), Encoding.UTF8.GetBytes(html));
-            }
-            return CreateResponseBytes(new StringBuilder("HTTP/1.1 404 Not Found\r\n\r\n"), new byte[0]);
         }
 
         // Собирает ответ в виде массива байт из байтов строки head и байтов body.
