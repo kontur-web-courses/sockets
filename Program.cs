@@ -162,64 +162,106 @@ namespace Sockets
             }
         }
 
-        private static NameValueCollection GetQueryParameters(string uri)
+        private static (string, NameValueCollection) GetUriAndParameters(string uri)
         {
             var parts = uri.Split("?");
-            return parts.Length != 2 ? new NameValueCollection() : HttpUtility.ParseQueryString(parts[1]);
+            return (parts[0], parts.Length != 2 
+                ? new NameValueCollection() 
+                : HttpUtility.ParseQueryString(parts[1]));
         }
 
         private static byte[] ProcessRequest(Request request)
         {
-            var queryParameters = GetQueryParameters(request.RequestUri);
-            queryParameters.Add("{{ServerTime}}", DateTime.Now.ToString(CultureInfo.InvariantCulture));
-            queryParameters.Add("{{Hello}}", queryParameters.Get("greeting") ?? "Hello");
-            queryParameters.Add("{{World}}", queryParameters.Get("name") ?? "World");
+            var (uri, queryParameters) = 
+                GetUriAndParameters(request.RequestUri);
+            var headers = new NameValueCollection();
 
-            return request.RequestUri.Split("?")[0] switch
+            switch (uri)
             {
-                "/hello.html" => CreateResponseBytes(new StringBuilder("HTTP/1.1 200 OK"),
-                    Replace(File.ReadAllBytes("hello.html"), queryParameters), "text/html; charset=utf-8"),
-                "/" => CreateResponseBytes(new StringBuilder("HTTP/1.1 200 OK"),
-                    File.ReadAllBytes("hello.html"), "text/html; charset=utf-8"),
-                "/groot.gif" => CreateResponseBytes(new StringBuilder("HTTP/1.1 200 OK"),
-                    File.ReadAllBytes("groot.gif"), "image/gif"),
-                "/time.html" => CreateResponseBytes(new StringBuilder("HTTP/1.1 200 OK"),
-                    Replace(File.ReadAllBytes("time.template.html"), queryParameters),
-                    "text/html; charset=utf-8"),
-                _ => CreateResponseBytes(new StringBuilder("HTTP/1.1 404 Not Found"),
-                    Array.Empty<byte>())
-            };
+                case "/hello.html":
+                case "/":
+                    if (queryParameters.Count != 0)
+                    {
+                        var name = queryParameters["name"];
+                        if (queryParameters["name"] != null)
+                        {
+                            queryParameters.Add("{{World}}", HttpUtility.HtmlEncode(name));
+                            headers.Add("Set-Cookie", $"name={HttpUtility.UrlEncode(name)}");
+                        }
+                        if (queryParameters["greeting"] != null)
+                            queryParameters.Add("{{Hello}}", HttpUtility.HtmlEncode(queryParameters["greeting"]));
+                    }
+
+                    if (queryParameters.Count == 0 || queryParameters["name"] == null)
+                    {
+                        var cookieHeader = request.Headers
+                            .FirstOrDefault(h => h.Name == "Cookie");
+                        if (cookieHeader != null)
+                        {
+                            var cookieString = cookieHeader.Value;
+                            foreach (var cookie in cookieString.Split(';'))
+                            {
+                                var splittedCookie = cookie.Split('=');
+                                var key = splittedCookie[0];
+                                var value = HttpUtility.UrlDecode(splittedCookie[1]);
+                                if (key == "name")
+                                    queryParameters.Add("{{World}}", HttpUtility.HtmlEncode(value));
+                            }
+                        }
+                    }
+                    headers.Add("Content-Type", "text/html; charset=utf-8");
+                    return CreateResponseBytes(new StringBuilder("HTTP/1.1 200 OK"),
+                        Replace(File.ReadAllBytes("hello.html"), 
+                            queryParameters), headers);
+                
+                case "/groot.gif":
+                    headers.Add("Content-Type", "image/gif");
+                    return CreateResponseBytes(
+                        new StringBuilder("HTTP/1.1 200 OK"),
+                        File.ReadAllBytes("groot.gif"), 
+                        headers);
+                
+                case "/time.html":
+                    headers.Add("Content-Type", "text/html; charset=utf-8");
+                    queryParameters.Add("{{ServerTime}}", 
+                        DateTime.Now.ToString(CultureInfo.InvariantCulture));
+                    return CreateResponseBytes(
+                        new StringBuilder("HTTP/1.1 200 OK"),
+                        Replace(File.ReadAllBytes("time.template.html"), queryParameters), 
+                        headers);
+                
+                default:
+                    return CreateResponseBytes(
+                        new StringBuilder("HTTP/1.1 404 Not Found"), 
+                        Array.Empty<byte>(),
+                        headers);
+            }
         }
 
         private static byte[] Replace(byte[] bytes, NameValueCollection nameValueCollection)
         {
             var stringBuilder = new StringBuilder(Encoding.UTF8.GetString(bytes));
             foreach (var name in nameValueCollection.AllKeys)
-            {
                 if (!string.IsNullOrEmpty(name))
                     stringBuilder.Replace(name, nameValueCollection[name]);
-            }
-
             return Encoding.UTF8.GetBytes(stringBuilder.ToString());
         }
 
-        private static void AddHeaders(StringBuilder head, int bodyLength, string contentType)
+        private static void AddHeaders(StringBuilder head, NameValueCollection headers)
         {
-            if (contentType != null)
+            foreach (var header in headers.AllKeys)
             {
                 head.Append('\n');
-                head.Append($"Content-Type: {contentType}");
+                head.Append($"{header}: {headers[header]}");
             }
-
-            head.Append('\n');
-            head.Append($"Content-Length: {bodyLength}");
             head.Append("\r\n\r\n");
         }
 
-        // Собирает ответ в виде массива байт из байтов строки head и байтов body.
-        private static byte[] CreateResponseBytes(StringBuilder head, byte[] body, string contentType = null)
+        private static byte[] CreateResponseBytes(StringBuilder head, byte[] body, 
+            NameValueCollection headers)
         {
-            AddHeaders(head, body.Length, contentType);
+            headers.Add("Content-Length", body.Length.ToString());
+            AddHeaders(head, headers);
             var headBytes = Encoding.ASCII.GetBytes(head.ToString());
             var responseBytes = new byte[headBytes.Length + body.Length];
             Array.Copy(headBytes, responseBytes, headBytes.Length);
