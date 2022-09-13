@@ -161,11 +161,10 @@ namespace Sockets
         {
             var head = "";
             var body = Encoding.UTF8.GetBytes("HTTP/1.1 404 Not Found\r\n\r\n");
-            switch (request.RequestUri)
+            switch (request.RequestUri.Split('?').First())
             {
                 case "/" or "/hello.html":
-                    body = File.ReadAllBytes("hello.html");
-                    head = $"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {body.Length}\r\n\r\n";
+                    (head, body) = ProcessHelloRequest(request);
                     break;
                 case "/groot.gif":
                     body = File.ReadAllBytes("groot.gif");
@@ -181,6 +180,22 @@ namespace Sockets
                     break;
             }
             return CreateResponseBytes(head, body);
+        }
+
+        private static (string head, byte[] body) ProcessHelloRequest(Request request)
+        {
+            var body = File.ReadAllText("hello.html");
+            var head = $"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {body.Length}\r\n\r\n";
+            var parameters = HttpUtility.ParseQueryString(request.RequestUri.Split('?')[1]);
+            if (parameters["greeting"] is { } greeting)
+            {
+                body = body.Replace("{{Hello}}", greeting);
+            }
+            if (parameters["name"] is { } name)
+            {
+                body = body.Replace("{{World}}", name);
+            }
+            return (head, Encoding.UTF8.GetBytes(body));
         }
 
         // Собирает ответ в виде массива байт из байтов строки head и байтов body.
