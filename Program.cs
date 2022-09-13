@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.Mime;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
@@ -22,15 +23,15 @@ namespace Sockets
 
     public class AsynchronousSocketListener
     {
-        private const int listeningPort = 11000;
-        private static ManualResetEvent connectionEstablished = new ManualResetEvent(false);
+        private const int ListeningPort = 11000;
+        private static ManualResetEvent connectionEstablished = new(false);
 
         private class ReceivingState
         {
             public Socket ClientSocket;
             public const int BufferSize = 1024;
             public readonly byte[] Buffer = new byte[BufferSize];
-            public readonly List<byte> ReceivedData = new List<byte>();
+            public readonly List<byte> ReceivedData = new();
         }
 
         public static void StartListening()
@@ -38,9 +39,9 @@ namespace Sockets
             // Определяем IP-адрес, по которому будем принимать сообщения.
             // Для этого сначала получаем DNS-имя компьютера,
             // а из всех адресов выбираем первый попавшийся IPv4 адрес.
-            string hostName = Dns.GetHostName();
-            IPHostEntry ipHostEntry = Dns.GetHostEntry(hostName);
-            IPAddress ipV4Address = ipHostEntry.AddressList
+            var hostName = Dns.GetHostName();
+            var ipHostEntry = Dns.GetHostEntry(hostName);
+            var ipV4Address = ipHostEntry.AddressList
                 .Where(address => address.AddressFamily == AddressFamily.InterNetwork)
                 .OrderBy(address => address.ToString())
                 .FirstOrDefault();
@@ -49,11 +50,12 @@ namespace Sockets
                 Console.WriteLine(">>> Can't find IPv4 address for host");
                 return;
             }
+
             // По выбранному IP-адресу будем слушать listeningPort.
-            IPEndPoint ipEndPoint = new IPEndPoint(ipV4Address, listeningPort);
+            var ipEndPoint = new IPEndPoint(ipV4Address, ListeningPort);
 
             // Создаем TCP/IP сокет для приема соединений.
-            Socket connectionSocket = new Socket(ipV4Address.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+            var connectionSocket = new Socket(ipV4Address.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
 
             try
             {
@@ -98,8 +100,8 @@ namespace Sockets
             connectionEstablished.Set();
 
             // Получаем сокет к клиенту, с которым установлено соединение.
-            Socket connectionSocket = (Socket)asyncResult.AsyncState;
-            Socket clientSocket = connectionSocket.EndAccept(asyncResult);
+            var connectionSocket = (Socket)asyncResult.AsyncState;
+            var clientSocket = connectionSocket.EndAccept(asyncResult);
 
             // Принимаем данные от клиента.
             Receive(clientSocket);
@@ -108,8 +110,11 @@ namespace Sockets
         private static void Receive(Socket clientSocket)
         {
             // Создаем объект для callback.
-            ReceivingState receivingState = new ReceivingState();
-            receivingState.ClientSocket = clientSocket;
+            var receivingState = new ReceivingState
+            {
+                ClientSocket = clientSocket
+            };
+
             // Начинаем асинхронно получать данные от клиента.
             // Передаем буфер, куда будут складываться полученные байты.
             clientSocket.BeginReceive(receivingState.Buffer, 0, ReceivingState.BufferSize, SocketFlags.None,
@@ -119,57 +124,146 @@ namespace Sockets
         private static void ReceiveCallback(IAsyncResult asyncResult)
         {
             // Достаем клиентский сокет из параметра callback.
-            ReceivingState receivingState = (ReceivingState)asyncResult.AsyncState;
-            Socket clientSocket = receivingState.ClientSocket;
+            var receivingState = (ReceivingState)asyncResult.AsyncState;
+            var clientSocket = receivingState.ClientSocket;
 
             // Читаем данные из клиентского сокета.
-            int bytesReceived = clientSocket.EndReceive(asyncResult);
+            var bytesReceived = clientSocket.EndReceive(asyncResult);
 
-            if (bytesReceived > 0)
+            if (bytesReceived <= 0) return;
+
+            // В буфер могли поместиться не все данные.
+            // Все данные от клиента складываем в другой буфер - ReceivedData.
+            receivingState.ReceivedData.AddRange(receivingState.Buffer.Take(bytesReceived));
+
+            // Пытаемся распарсить Request из полученных данных.
+            var receivedBytes = receivingState.ReceivedData.ToArray();
+            var request = Request.StupidParse(receivedBytes);
+            if (request == null)
             {
-                // В буфер могли поместиться не все данные.
-                // Все данные от клиента складываем в другой буфер - ReceivedData.
-                receivingState.ReceivedData.AddRange(receivingState.Buffer.Take(bytesReceived));
-
-                // Пытаемся распарсить Request из полученных данных.
-                byte[] receivedBytes = receivingState.ReceivedData.ToArray();
-                Request request = Request.StupidParse(receivedBytes);
-                if (request == null)
-                {
-                    // request не распарсился, значит получили не все данные.
-                    // Запрашиваем еще.
-                    clientSocket.BeginReceive(receivingState.Buffer, 0, ReceivingState.BufferSize, SocketFlags.None,
-                        ReceiveCallback, receivingState);
-                }
-                else
-                {
-                    // Все данные были получены от клиента.
-                    // Для удобства выведем их на консоль.
-                    Console.WriteLine($">>> Received {receivedBytes.Length} bytes from {clientSocket.RemoteEndPoint}. Data:\n" +
-                        Encoding.ASCII.GetString(receivedBytes));
-
-                    // Сформируем ответ.
-                    byte[] responseBytes = ProcessRequest(request);
-
-                    // Отправим ответ клиенту.
-                    Send(clientSocket, responseBytes);
-                }
+                // request не распарсился, значит получили не все данные.
+                // Запрашиваем еще.
+                clientSocket.BeginReceive(receivingState.Buffer, 0, ReceivingState.BufferSize, SocketFlags.None,
+                    ReceiveCallback, receivingState);
             }
+            else
+            {
+                // Все данные были получены от клиента.
+                // Для удобства выведем их на консоль.
+                Console.WriteLine(
+                    $">>> Received {receivedBytes.Length} bytes from {clientSocket.RemoteEndPoint}. Data:\n" +
+                    Encoding.ASCII.GetString(receivedBytes));
+
+                // Сформируем ответ.
+                var responseBytes = ProcessRequest(request);
+
+                // Отправим ответ клиенту.
+                Send(clientSocket, responseBytes);
+            }
+        }
+
+        private static (string, NameValueCollection) GetUriAndParameters(string uri)
+        {
+            var parts = uri.Split("?");
+            return (parts[0], parts.Length != 2 
+                ? new NameValueCollection() 
+                : HttpUtility.ParseQueryString(parts[1]));
         }
 
         private static byte[] ProcessRequest(Request request)
         {
-            // TODO
-            var head = new StringBuilder("OK");
-            var body = new byte[0];
-            return CreateResponseBytes(head, body);
+            var (uri, queryParameters) = 
+                GetUriAndParameters(request.RequestUri);
+            var headers = new NameValueCollection();
+
+            switch (uri)
+            {
+                case "/hello.html":
+                case "/":
+                    if (queryParameters.Count != 0)
+                    {
+                        var name = queryParameters["name"];
+                        if (queryParameters["name"] != null)
+                        {
+                            queryParameters.Add("{{World}}", HttpUtility.HtmlEncode(name));
+                            headers.Add("Set-Cookie", $"name={HttpUtility.UrlEncode(name)}");
+                        }
+                        if (queryParameters["greeting"] != null)
+                            queryParameters.Add("{{Hello}}", HttpUtility.HtmlEncode(queryParameters["greeting"]));
+                    }
+
+                    if (queryParameters.Count == 0 || queryParameters["name"] == null)
+                    {
+                        var cookieHeader = request.Headers
+                            .FirstOrDefault(h => h.Name == "Cookie");
+                        if (cookieHeader != null)
+                        {
+                            var cookieString = cookieHeader.Value;
+                            foreach (var cookie in cookieString.Split(';'))
+                            {
+                                var splittedCookie = cookie.Split('=');
+                                var key = splittedCookie[0];
+                                var value = HttpUtility.UrlDecode(splittedCookie[1]);
+                                if (key == "name")
+                                    queryParameters.Add("{{World}}", HttpUtility.HtmlEncode(value));
+                            }
+                        }
+                    }
+                    headers.Add("Content-Type", "text/html; charset=utf-8");
+                    return CreateResponseBytes(new StringBuilder("HTTP/1.1 200 OK"),
+                        Replace(File.ReadAllBytes("hello.html"), 
+                            queryParameters), headers);
+                
+                case "/groot.gif":
+                    headers.Add("Content-Type", "image/gif");
+                    return CreateResponseBytes(
+                        new StringBuilder("HTTP/1.1 200 OK"),
+                        File.ReadAllBytes("groot.gif"), 
+                        headers);
+                
+                case "/time.html":
+                    headers.Add("Content-Type", "text/html; charset=utf-8");
+                    queryParameters.Add("{{ServerTime}}", 
+                        DateTime.Now.ToString(CultureInfo.InvariantCulture));
+                    return CreateResponseBytes(
+                        new StringBuilder("HTTP/1.1 200 OK"),
+                        Replace(File.ReadAllBytes("time.template.html"), queryParameters), 
+                        headers);
+                
+                default:
+                    return CreateResponseBytes(
+                        new StringBuilder("HTTP/1.1 404 Not Found"), 
+                        Array.Empty<byte>(),
+                        headers);
+            }
         }
 
-        // Собирает ответ в виде массива байт из байтов строки head и байтов body.
-        private static byte[] CreateResponseBytes(StringBuilder head, byte[] body)
+        private static byte[] Replace(byte[] bytes, NameValueCollection nameValueCollection)
         {
-            byte[] headBytes = Encoding.ASCII.GetBytes(head.ToString());
-            byte[] responseBytes = new byte[headBytes.Length + body.Length];
+            var stringBuilder = new StringBuilder(Encoding.UTF8.GetString(bytes));
+            foreach (var name in nameValueCollection.AllKeys)
+                if (!string.IsNullOrEmpty(name))
+                    stringBuilder.Replace(name, nameValueCollection[name]);
+            return Encoding.UTF8.GetBytes(stringBuilder.ToString());
+        }
+
+        private static void AddHeaders(StringBuilder head, NameValueCollection headers)
+        {
+            foreach (var header in headers.AllKeys)
+            {
+                head.Append('\n');
+                head.Append($"{header}: {headers[header]}");
+            }
+            head.Append("\r\n\r\n");
+        }
+
+        private static byte[] CreateResponseBytes(StringBuilder head, byte[] body, 
+            NameValueCollection headers)
+        {
+            headers.Add("Content-Length", body.Length.ToString());
+            AddHeaders(head, headers);
+            var headBytes = Encoding.ASCII.GetBytes(head.ToString());
+            var responseBytes = new byte[headBytes.Length + body.Length];
             Array.Copy(headBytes, responseBytes, headBytes.Length);
             Array.Copy(body, 0,
                 responseBytes, headBytes.Length,
