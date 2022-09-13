@@ -161,6 +161,8 @@ namespace Sockets
         {
             if (request.RequestUri == "/" || request.RequestUri == "/hello.html")
                 return CreateResponseBytes(new StringBuilder("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: 332\r\n\r\n"), File.ReadAllBytes("hello.html"));
+            if (request.RequestUri == "/groot.gif")
+                return CreateResponseBytes(new StringBuilder("HTTP/1.1 200 OK\r\nContent-Type: image/gif; charset=utf-8\r\nContent-Length: 749699\r\n\r\n"), File.ReadAllBytes("groot.gif"));
             return CreateResponseBytes(new StringBuilder("HTTP/1.1 404 Not Found\r\n\r\n"), new byte[0]);
         }
 
