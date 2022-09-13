@@ -159,11 +159,18 @@ namespace Sockets
 
         private static byte[] ProcessRequest(Request request)
         {
-            if (request.RequestUri == "/" || request.RequestUri == "/hello.html")
-                return CreateResponseBytes(new StringBuilder("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: 332\r\n\r\n"), File.ReadAllBytes("hello.html"));
-            if (request.RequestUri == "/groot.gif")
+            var uri = request.RequestUri.Split('?');
+            var url = uri[0];
+            var query = uri.Length > 1 ? HttpUtility.ParseQueryString(uri[1]) : null;
+            if (url == "/" || url == "/hello.html")
+            {
+                var html = File.ReadAllText("hello.html");
+                    html = html.Replace("{{Hello}}", query?["greeting"] ?? "Hello").Replace("{{World}}", query?["name"] ?? "World");
+                return CreateResponseBytes(new StringBuilder("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: 332\r\n\r\n"), Encoding.UTF8.GetBytes(html));
+            }
+            if (url == "/groot.gif")
                 return CreateResponseBytes(new StringBuilder("HTTP/1.1 200 OK\r\nContent-Type: image/gif; charset=utf-8\r\nContent-Length: 749699\r\n\r\n"), File.ReadAllBytes("groot.gif"));
-            if (request.RequestUri == "/time.html")
+            if (url == "/time.html")
             {
                 var html = File.ReadAllText("time.template.html").Replace("{{ServerTime}}", DateTime.Now.ToString());
                 return CreateResponseBytes(new StringBuilder($"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {html.Length}\r\n\r\n"), Encoding.UTF8.GetBytes(html));
