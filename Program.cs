@@ -174,6 +174,10 @@ namespace Sockets
                     break;
                 case "/groot.gif":
                     throw new NotImplementedException();
+                case "/time.html":
+                    body = Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(File.ReadAllBytes("time.template.html")).Replace("{{ServerTime}}", $"{DateTime.Now}"));
+                    head.Append("Content-Type: text/html; charset=utf-8\r\n");
+                    break;
             }
             
             return CreateResponseBytes(head, body);
