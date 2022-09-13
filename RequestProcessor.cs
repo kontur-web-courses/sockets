@@ -15,6 +15,8 @@ namespace Sockets
         {
             public static Header HtmlContentType => new("Content-Type", "text/html; charset=utf-8");
 
+            public static Header GifContentType => new("Content-Type", "image/gif");
+
             public static Header SetCookie(string name, string value) => new("Set-Cookie", name + '=' + value);
 
             public static Header ContentLength(int length) => new("Content-Length", length.ToString());
@@ -26,7 +28,7 @@ namespace Sockets
             {
                 {RequestUri: "/hello.html"} => FromHelloFile(request, true),
                 {RequestUri: "/"} => FromHelloFile(request, false),
-                {RequestUri: "/groot.gif"} => FromFile("groot.gif"),
+                {RequestUri: "/groot.gif"} => FromFile("groot.gif", DefaultHeaders.GifContentType),
                 {RequestUri: "/time.html"} => FromTimeFile(),
                 _ => NotExisingPage()
             };
@@ -34,8 +36,8 @@ namespace Sockets
             return CreateResponseBytes(head, body);
         }
 
-        private static (HeaderBuilder Head, byte[] Body) FromFile(string filename) =>
-            FromFileContents(File.ReadAllBytes(filename));
+        private static (HeaderBuilder Head, byte[] Body) FromFile(string filename, Header contentType) =>
+            FromFileContents(File.ReadAllBytes(filename), contentType);
 
         private static (HeaderBuilder Head, byte[] Body) FromHelloFile(Request request, bool tryToReplaceFromRequest)
         {
@@ -57,7 +59,7 @@ namespace Sockets
                 request.Headers.FirstOrDefault(h => h.Name == "Cookie" && h.Value.StartsWith(name)) is { } header)
                 file = file.TryReplaceEncoded(world, header.Value[5..].FromBase64String());
 
-            var result = FromFileContents(Encoding.GetBytes(file));
+            var result = FromFileContents(Encoding.GetBytes(file), DefaultHeaders.HtmlContentType);
 
             if (replacedName)
                 result.Head.Append(DefaultHeaders.SetCookie(name, nameFromRequest.ToBase64String()));
@@ -69,13 +71,13 @@ namespace Sockets
         {
             var file = File.ReadAllText("time.template.html")
                 .Replace("{{ServerTime}}", DateTime.Now.ToString());
-            return FromFileContents(Encoding.GetBytes(file));
+            return FromFileContents(Encoding.GetBytes(file), DefaultHeaders.HtmlContentType);
         }
 
-        private static (HeaderBuilder Head, byte[] Body) FromFileContents(byte[] fileBytes)
+        private static (HeaderBuilder Head, byte[] Body) FromFileContents(byte[] fileBytes, Header contentType)
         {
             var head = HeaderBuilder.ForOk()
-                .Append(DefaultHeaders.HtmlContentType)
+                .Append(contentType)
                 .Append(DefaultHeaders.ContentLength(fileBytes.Length));
             return (head, fileBytes);
         }
