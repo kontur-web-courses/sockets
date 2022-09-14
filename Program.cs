@@ -9,6 +9,8 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Web;
+using static System.Net.WebRequestMethods;
+using File = System.IO.File;
 
 namespace Sockets
 {
@@ -169,28 +171,28 @@ namespace Sockets
             switch (requestUri)
             {
                 case "/" or "/hello.html":
-                    var html = File.ReadAllBytes("hello.html");
-                    
+                    body = File.ReadAllBytes("hello.html");
+                    // read and save queries in url
                     var queriesCollection = HttpUtility.ParseQueryString(queries);
                     var newGreeting = queriesCollection["greeting"];
                     var newName = queriesCollection["name"];
-                    
-                    html = Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(html)
+                    Console.WriteLine(queriesCollection["name"]);
+                    // change name and greeting, if present in queries
+                    body = Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(body)
                         .Replace("{{Hello}}", $"{HttpUtility.HtmlEncode(newGreeting ?? "{{Hello}}")}")
                         .Replace("{{World}}", $"{HttpUtility.HtmlEncode(newName ?? "{{World}}")}"));
-
+                    // save new cookie, if present in queries
                     if (newName is not null)
-                        head.Append($"Set-Cookie: name={HttpUtility.UrlEncode(newName)};");
-
+                        head.Append($"Set-Cookie: name={HttpUtility.UrlEncode(HttpUtility.HtmlEncode(newName))};");
+                    // get name from cookies
                     var savedName = request.Headers
                         .FirstOrDefault(header => header.Name == "Cookie")
                         ?.Value.Split("=")[1];
-
+                    // change name, if present in cookies
                     if (savedName is not null)
-                        html = Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(html)
-                            .Replace("{{World}}", $"{HttpUtility.UrlDecode(savedName)}"));
+                        body = Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(body)
+                            .Replace("{{World}}", $"{HttpUtility.UrlEncode(savedName)}"));
 
-                    body = html;
                     head.Append("Content-Type: text/html; charset=utf-8\r\n");
                     break;
                 
