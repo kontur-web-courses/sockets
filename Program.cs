@@ -9,9 +9,6 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Web;
-using static System.Net.WebRequestMethods;
-using File = System.IO.File;
-
 namespace Sockets
 {
     class Program
@@ -21,12 +18,10 @@ namespace Sockets
             AsynchronousSocketListener.StartListening();
         }
     }
-
     public class AsynchronousSocketListener
     {
         private const int listeningPort = 11000;
         private static ManualResetEvent connectionEstablished = new ManualResetEvent(false);
-
         private class ReceivingState
         {
             public Socket ClientSocket;
@@ -34,7 +29,6 @@ namespace Sockets
             public readonly byte[] Buffer = new byte[BufferSize];
             public readonly List<byte> ReceivedData = new List<byte>();
         }
-
         public static void StartListening()
         {
             // Определяем IP-адрес, по которому будем принимать сообщения.
@@ -45,7 +39,7 @@ namespace Sockets
             IPAddress ipV4Address = ipHostEntry.AddressList
                 .Where(address => address.AddressFamily == AddressFamily.InterNetwork)
                 .OrderBy(address => address.ToString())
-                .FirstOrDefault();
+                .ElementAt(2);
             if (ipV4Address == null)
             {
                 Console.WriteLine(">>> Can't find IPv4 address for host");
@@ -53,17 +47,14 @@ namespace Sockets
             }
             // По выбранному IP-адресу будем слушать listeningPort.
             IPEndPoint ipEndPoint = new IPEndPoint(ipV4Address, listeningPort);
-
             // Создаем TCP/IP сокет для приема соединений.
             Socket connectionSocket = new Socket(ipV4Address.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
-
             try
             {
                 // Присоединяем сокет к выбранной конечной точке (IP-адресу и порту).
                 connectionSocket.Bind(ipEndPoint);
                 // Начинаем слушать, в очереди на установку соединений не более 100 клиентов.
                 connectionSocket.Listen(100);
-
                 // Принимаем входящие соединения.
                 while (true)
                     Accept(connectionSocket);
@@ -75,38 +66,31 @@ namespace Sockets
                 Console.WriteLine(">>> ");
             }
         }
-
         private static void Accept(Socket connectionSocket)
         {
             // Сбрасываем состояние события установки соединения: теперь оно "не произошло".
             // Это событие используется для синхронизации потоков.
             connectionEstablished.Reset();
-
             // Начинаем слушать асинхронно, ожидая входящих соединений.
             // Вторым параметром передаем объект, который будет передан в callback.
             connectionSocket.BeginAccept(AcceptCallback, connectionSocket);
             Console.WriteLine($">>> Waiting for a connection to http://{connectionSocket.LocalEndPoint}");
-
             // Поток, в котором начали слушать connectionSocket будет ждать,
             // пока кто-нибудь не установит событие connectionEstablished.
             // Это произойдет в AcceptCallback, когда соединение будет установлено.
             connectionEstablished.WaitOne();
         }
-
         private static void AcceptCallback(IAsyncResult asyncResult)
         {
             // Соединение установлено, сигнализируем основному потоку,
             // чтобы он продолжил принимать соединения.
             connectionEstablished.Set();
-
             // Получаем сокет к клиенту, с которым установлено соединение.
             Socket connectionSocket = (Socket)asyncResult.AsyncState;
             Socket clientSocket = connectionSocket.EndAccept(asyncResult);
-
             // Принимаем данные от клиента.
             Receive(clientSocket);
         }
-
         private static void Receive(Socket clientSocket)
         {
             // Создаем объект для callback.
@@ -117,22 +101,18 @@ namespace Sockets
             clientSocket.BeginReceive(receivingState.Buffer, 0, ReceivingState.BufferSize, SocketFlags.None,
                 ReceiveCallback, receivingState);
         }
-
         private static void ReceiveCallback(IAsyncResult asyncResult)
         {
             // Достаем клиентский сокет из параметра callback.
             ReceivingState receivingState = (ReceivingState)asyncResult.AsyncState;
             Socket clientSocket = receivingState.ClientSocket;
-
             // Читаем данные из клиентского сокета.
             int bytesReceived = clientSocket.EndReceive(asyncResult);
-
             if (bytesReceived > 0)
             {
                 // В буфер могли поместиться не все данные.
                 // Все данные от клиента складываем в другой буфер - ReceivedData.
                 receivingState.ReceivedData.AddRange(receivingState.Buffer.Take(bytesReceived));
-
                 // Пытаемся распарсить Request из полученных данных.
                 byte[] receivedBytes = receivingState.ReceivedData.ToArray();
                 Request request = Request.StupidParse(receivedBytes);
@@ -149,16 +129,13 @@ namespace Sockets
                     // Для удобства выведем их на консоль.
                     Console.WriteLine($">>> Received {receivedBytes.Length} bytes from {clientSocket.RemoteEndPoint}. Data:\n" +
                         Encoding.ASCII.GetString(receivedBytes));
-
                     // Сформируем ответ.
                     byte[] responseBytes = ProcessRequest(request);
-
                     // Отправим ответ клиенту.
                     Send(clientSocket, responseBytes);
                 }
             }
         }
-
         private static byte[] ProcessRequest(Request request)
         {
             var body = Array.Empty<byte>();
@@ -168,34 +145,36 @@ namespace Sockets
             var queries = "";
             if (uriAndQuery.Length > 1)
                 queries = uriAndQuery[1];
+            var queriesCollection = HttpUtility.ParseQueryString(queries);
             switch (requestUri)
             {
                 case "/" or "/hello.html":
-                    body = File.ReadAllBytes("hello.html");
-                    // read and save queries in url
-                    var queriesCollection = HttpUtility.ParseQueryString(queries);
+                    var html = File.ReadAllText("hello.html", Encoding.UTF8);
+                    
                     var newGreeting = queriesCollection["greeting"];
                     var newName = queriesCollection["name"];
-                    Console.WriteLine(queriesCollection["name"]);
-                    // change name and greeting, if present in queries
-                    body = Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(body)
-                        .Replace("{{Hello}}", $"{HttpUtility.HtmlEncode(newGreeting ?? "{{Hello}}")}")
-                        .Replace("{{World}}", $"{HttpUtility.HtmlEncode(newName ?? "{{World}}")}"));
-                    // save new cookie, if present in queries
+
+                    if (newGreeting is not null)
+                        html = html.Replace("{{Hello}}", $"{HttpUtility.HtmlEncode(newGreeting)}");
+
                     if (newName is not null)
-                        head.Append($"Set-Cookie: name={HttpUtility.UrlEncode(HttpUtility.HtmlEncode(newName))};");
-                    // get name from cookies
-                    var savedName = request.Headers
+                    {
+                        html = html.Replace("{{World}}", $"{HttpUtility.HtmlEncode(newName)}");
+                        head.Append($"Set-Cookie: name={HttpUtility.UrlEncode(newName)};");
+                    }
+                    else
+                    {
+                        var savedName = request.Headers
                         .FirstOrDefault(header => header.Name == "Cookie")
                         ?.Value.Split("=")[1];
-                    // change name, if present in cookies
-                    if (savedName is not null)
-                        body = Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(body)
-                            .Replace("{{World}}", $"{HttpUtility.UrlEncode(savedName)}"));
+                        if (savedName is not null)
+                            html = html.Replace("{{World}}", $"{HttpUtility.UrlDecode(HttpUtility.HtmlEncode(savedName))}");
+                    }
 
+                    body = Encoding.UTF8.GetBytes(html);
                     head.Append("Content-Type: text/html; charset=utf-8\r\n");
                     break;
-                
+
                 case "/groot.gif":
                     body = File.ReadAllBytes("groot.gif");
                     head.Append("Content-Type: image/gif; charset=utf-8\r\n");
@@ -206,7 +185,7 @@ namespace Sockets
                         .Replace("{{ServerTime}}", $"{DateTime.Now}"));
                     head.Append("Content-Type: text/html; charset=utf-8\r\n");
                     break;
-                
+
                 default:
                     head = new StringBuilder("HTTP/1.1 404 Not Found\r\n");
                     break;
@@ -214,7 +193,6 @@ namespace Sockets
             head.Append($"Content-Length: {body.Length}\r\n\r\n");
             return CreateResponseBytes(head, body);
         }
-
         // Собирает ответ в виде массива байт из байтов строки head и байтов body.
         private static byte[] CreateResponseBytes(StringBuilder head, byte[] body)
         {
@@ -226,7 +204,6 @@ namespace Sockets
                 body.Length);
             return responseBytes;
         }
-
         private static void Send(Socket clientSocket, byte[] responseBytes)
         {
             Console.WriteLine(">>> Sending {0} bytes to client socket.", responseBytes.Length);
@@ -234,7 +211,6 @@ namespace Sockets
             clientSocket.BeginSend(responseBytes, 0, responseBytes.Length, SocketFlags.None,
                 SendCallback, clientSocket);
         }
-
         private static void SendCallback(IAsyncResult asyncResult)
         {
             // Достаем клиентский сокет из параметра callback.
@@ -244,7 +220,6 @@ namespace Sockets
                 // Завершаем отправку данных клиенту.
                 int bytesSent = clientSocket.EndSend(asyncResult);
                 Console.WriteLine(">>> Sent {0} bytes to client.", bytesSent);
-
                 // Закрываем соединение.
                 clientSocket.Shutdown(SocketShutdown.Both);
                 clientSocket.Close();
