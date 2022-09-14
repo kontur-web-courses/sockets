@@ -187,7 +187,7 @@ namespace Sockets
                         ?.Value.Split("=")[1];
 
                     if (savedName is not null)
-                        html = Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(body)
+                        html = Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(html)
                             .Replace("{{World}}", $"{HttpUtility.UrlDecode(savedName)}"));
 
                     body = html;
