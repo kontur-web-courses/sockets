@@ -39,7 +39,7 @@ namespace Sockets
             IPAddress ipV4Address = ipHostEntry.AddressList
                 .Where(address => address.AddressFamily == AddressFamily.InterNetwork)
                 .OrderBy(address => address.ToString())
-                .ElementAt(2);
+                .FirstOrDefault();
             if (ipV4Address == null)
             {
                 Console.WriteLine(">>> Can't find IPv4 address for host");
