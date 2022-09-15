@@ -159,16 +159,89 @@ namespace Sockets
 
         private static byte[] ProcessRequest(Request request)
         {
-            // TODO
-            var head = new StringBuilder("OK");
-            var body = new byte[0];
+            var head = "";
+            var body = Encoding.UTF8.GetBytes("HTTP/1.1 404 Not Found\r\n\r\n");
+            switch (request.RequestUri.Split('?').First())
+            {
+                case "/" or "/hello.html":
+                    (head, body) = ProcessHelloRequest(request);
+                    break;
+                case "/groot.gif":
+                    body = File.ReadAllBytes("groot.gif");
+                    head = $"HTTP/1.1 200 OK\r\nContent-Type: image/gif; charset=utf-8\r\nContent-Length: {body.Length}\r\n";
+                    break;
+                case "/time.html":
+                    var pattern = File.ReadAllText("time.template.html");
+                    var page = pattern.Replace(
+                        "{{ServerTime}}",
+                        DateTime.Now.ToString(CultureInfo.InvariantCulture));
+                    body = Encoding.UTF8.GetBytes(page);
+                    head = $"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {body.Length}\r\n";
+                    break;
+            }
+
+            head += "\r\n";
             return CreateResponseBytes(head, body);
         }
 
-        // Собирает ответ в виде массива байт из байтов строки head и байтов body.
-        private static byte[] CreateResponseBytes(StringBuilder head, byte[] body)
+        private static (string head, byte[] body) ProcessHelloRequest(Request request)
         {
-            byte[] headBytes = Encoding.ASCII.GetBytes(head.ToString());
+            var body = File.ReadAllText("hello.html");
+            var head = $"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {body.Length}\r\n";
+            
+            var splitted = request.RequestUri.Split('?');
+            var (_, parameters) = (
+                splitted[0], 
+                splitted.Length < 2 ? 
+                    null :
+                    splitted[1]);
+            
+            var nameCookieValue = GetNameCookieValue(request);
+
+            if (parameters == null && nameCookieValue == null)
+            {
+                return (head, Encoding.UTF8.GetBytes(body));
+            }
+
+            if (parameters == null)
+            {
+                body = body.Replace("{{World}}", HttpUtility.HtmlEncode(nameCookieValue));
+                head += $"Set-Cookie: name={nameCookieValue}\r\n";
+                return (head, Encoding.UTF8.GetBytes(body));
+            }
+
+            var parsedParameters = HttpUtility.ParseQueryString(parameters);
+
+            if (parsedParameters["greeting"] is { } greeting)
+            {
+                body = body.Replace("{{Hello}}", HttpUtility.HtmlEncode(greeting));
+            }
+            
+
+            if (parsedParameters["name"] is { } name)
+            {
+                body = body.Replace("{{World}}", HttpUtility.HtmlEncode(name));
+                head += $"Set-Cookie: name={name}\r\n";
+            }
+
+            return (head, Encoding.UTF8.GetBytes(body));
+        }
+
+        private static string GetNameCookieValue(Request request)
+        {
+            var cookiesString = request.Headers.FirstOrDefault(x => x.Name == "Cookie")?.Value;
+            var nameCookieValue = cookiesString?
+                .Split("; ")
+                .Select(x => (x.Split("=")[0], x.Split("=")[1]))
+                .FirstOrDefault(x => x.Item1 == "name")
+                .Item2;
+            return nameCookieValue;
+        }
+
+        // Собирает ответ в виде массива байт из байтов строки head и байтов body.
+        private static byte[] CreateResponseBytes(string head, byte[] body)
+        {
+            byte[] headBytes = Encoding.ASCII.GetBytes(head);
             byte[] responseBytes = new byte[headBytes.Length + body.Length];
             Array.Copy(headBytes, responseBytes, headBytes.Length);
             Array.Copy(body, 0,
