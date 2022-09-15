@@ -188,32 +188,54 @@ namespace Sockets
         {
             var body = File.ReadAllText("hello.html");
             var head = $"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {body.Length}\r\n";
-            var splited = request.RequestUri.Split('?');
-            if (splited.Length < 2)
+            
+            var splitted = request.RequestUri.Split('?');
+            var (_, parameters) = (
+                splitted[0], 
+                splitted.Length < 2 ? 
+                    null :
+                    splitted[1]);
+            
+            var nameCookieValue = GetNameCookieValue(request);
+
+            if (parameters == null && nameCookieValue == null)
+            {
                 return (head, Encoding.UTF8.GetBytes(body));
-            var parameters = HttpUtility.ParseQueryString(splited[1]);
+            }
+
+            if (parameters == null)
+            {
+                body = body.Replace("{{World}}", HttpUtility.HtmlEncode(nameCookieValue));
+                head += $"Set-Cookie: name={nameCookieValue}\r\n";
+                return (head, Encoding.UTF8.GetBytes(body));
+            }
+
+            var parsedParameters = HttpUtility.ParseQueryString(parameters);
+
+            if (parsedParameters["greeting"] is { } greeting)
+            {
+                body = body.Replace("{{Hello}}", HttpUtility.HtmlEncode(greeting));
+            }
+            
+
+            if (parsedParameters["name"] is { } name)
+            {
+                body = body.Replace("{{World}}", HttpUtility.HtmlEncode(name));
+                head += $"Set-Cookie: name={name}\r\n";
+            }
+
+            return (head, Encoding.UTF8.GetBytes(body));
+        }
+
+        private static string GetNameCookieValue(Request request)
+        {
             var cookiesString = request.Headers.FirstOrDefault(x => x.Name == "Cookie")?.Value;
-            var nameValue = cookiesString?
+            var nameCookieValue = cookiesString?
                 .Split("; ")
                 .Select(x => (x.Split("=")[0], x.Split("=")[1]))
                 .FirstOrDefault(x => x.Item1 == "name")
                 .Item2;
-            if (nameValue != null)
-            {
-                head += $"Set-Cookie: {nameValue}\r\n";
-            }
-            if (parameters["greeting"] is { } greeting)
-            {
-                body = body.Replace("{{Hello}}", HttpUtility.HtmlEncode(greeting));
-            }
-
-            if (parameters["name"] is { } name)
-            {
-                body = body.Replace("{{World}}", HttpUtility.HtmlEncode(name));
-                head += $"Set-Cookie: {nameValue}\r\n";
-            }
-
-            return (head, Encoding.UTF8.GetBytes(body));
+            return nameCookieValue;
         }
 
         // Собирает ответ в виде массива байт из байтов строки head и байтов body.
