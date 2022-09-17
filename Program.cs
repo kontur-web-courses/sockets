@@ -160,7 +160,7 @@ namespace Sockets
                     if (newName is not null)
                     {
                         html = html.Replace("{{World}}", $"{HttpUtility.HtmlEncode(newName)}");
-                        head.Append($"Set-Cookie: name={HttpUtility.UrlEncode(newName)};");
+                        head.Append($"Set-Cookie: name={HttpUtility.UrlEncode(newName)};\r\n");
                     }
                     else
                     {
