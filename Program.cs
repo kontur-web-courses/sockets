@@ -166,7 +166,6 @@ namespace Sockets
             foreach (var h in request.Headers)
                 if (h.Name == "Cookie")
                     cookie = h.Value;
-            Console.WriteLine(cookie);
             if (request.RequestUri == "/" || request.RequestUri == "/hello.html")
             {
                 body = File.ReadAllBytes("hello.html");
