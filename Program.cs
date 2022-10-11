@@ -7,6 +7,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Web;
 
@@ -159,9 +160,82 @@ namespace Sockets
 
         private static byte[] ProcessRequest(Request request)
         {
-            // TODO
-            var head = new StringBuilder("OK");
-            var body = new byte[0];
+            byte[] body;
+            StringBuilder head;
+            string cookie = "";
+            foreach (var h in request.Headers)
+                if (h.Name == "Cookie")
+                    cookie = h.Value;
+            if (request.RequestUri == "/" || request.RequestUri == "/hello.html")
+            {
+                body = File.ReadAllBytes("hello.html");
+                head = new StringBuilder("HTTP/1.1 200 OK\r\n" +
+                    "Content-Type: text/html; charset=utf-8\r\n" +
+                    $"Content-Length: {body.Length}\r\n\r\n");
+            }
+            else if (request.RequestUri.Contains("hello.html?"))
+            {
+                cookie = cookie.Replace(";", "");
+                var cookies = cookie.Split(' ');
+                string greeting = "";
+                string name = "";
+                if (cookies.Length == 2)
+                {
+                    var firstPair = cookies[0].Split('=');
+                    var secondPair = cookies[1].Split('=');
+                    if (firstPair[0] == "greeting")
+                        greeting = firstPair[1];
+                    if (firstPair[0] == "name")
+                        name = firstPair[1];
+                    if (secondPair[0] == "greeting")
+                        greeting = secondPair[1];
+                    if (secondPair[0] == "name")
+                        name = secondPair[1];
+                }
+                else
+                {
+                    var pair = cookie.Split('=');
+                    if (pair[0] == "greeting")
+                        greeting = pair[1];
+                    if (pair[0] == "name")
+                        name = pair[1];
+                }
+                var param = request.RequestUri.Split('?')[1];
+                var dict = HttpUtility.ParseQueryString(param);
+                var greetingParam = dict["greeting"];
+                var nameParam = dict["name"];
+                if (greetingParam == null)
+                    greetingParam = greeting;
+                if (nameParam == null)
+                    nameParam = name;
+                body = Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(File.ReadAllBytes("hello.html"))
+                    .Replace("{{Hello}}", HttpUtility.HtmlEncode(greetingParam))
+                    .Replace("{{World}}", HttpUtility.HtmlEncode(nameParam)));
+                head = new StringBuilder("HTTP/1.1 200 OK\r\n" +
+                    "Content-Type: text/html; charset=utf-8\r\n" +
+                    $"Content-Length: {body.Length}\r\n" +
+                    $"Set-Cookie: greeting={HttpUtility.HtmlEncode(greetingParam)}\r\n" +
+                    $"Set-Cookie: name={HttpUtility.HtmlEncode(nameParam)}\r\n\r\n");
+            }
+            else if (request.RequestUri == "/groot.gif")
+            {
+                body = File.ReadAllBytes("groot.gif");
+                head = new StringBuilder("HTTP/1.1 200 OK\r\n" +
+                    "Content-Type: image/gif; charset=utf-8\r\n" +
+                    $"Content-Length: {body.Length}\r\n\r\n");
+            }
+            else if (request.RequestUri == "/time.html")
+            {
+                body = Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(File.ReadAllBytes("time.template.html")).Replace("{{ServerTime}}", DateTime.Now.ToString()));
+                head = new StringBuilder("HTTP/1.1 200 OK\r\n" +
+                    "Content-Type: text/html; charset=utf-8\r\n" +
+                    $"Content-Length: {body.Length}\r\n\r\n");
+            }
+            else
+            {
+                body = new byte[0];
+                head = new StringBuilder("HTTP/1.1 404 Not Found\r\n");
+            }
             return CreateResponseBytes(head, body);
         }
 
