@@ -162,58 +162,23 @@ namespace Sockets
 
         private static byte[] ProcessRequest(Request request)
         {
-            return request.RequestUri switch
+            var (address, queryString) = ParseUri(request.RequestUri);
+            return address switch
             {
-                "/" or "/hello.html" => HomePageResponse(),
-                "/groot.gif" => GifResponse("groot.gif"),
-                "/time.html" => TimePageResponse(),
-                _ => NotFoundResponse(),
+                "/" or "/hello.html" => Response.HomePage(queryString),
+                "/groot.gif" => Response.Gif("groot.gif"),
+                "/time.html" => Response.TimePage(),
+                _ => Response.NotFound(),
             };
         }
 
-        private static byte[] HomePageResponse()
-            => FromFileResponse(OkStatusLine, "hello.html", "text/html; charset=utf-8");
-
-        private static byte[] GifResponse(string filePath) 
-            => FromFileResponse(OkStatusLine, filePath, "image/gif");
-
-        private static byte[] TimePageResponse()
+        private static (string, NameValueCollection) ParseUri(string uri)
         {
-            var fileBytes = File.ReadAllBytes("time.template.html");
-            var file = Encoding.UTF8.GetString(fileBytes);
-            file = file.Replace("{{ServerTime}}", DateTime.Now.ToString(CultureInfo.InvariantCulture));
-            fileBytes = Encoding.UTF8.GetBytes(file);
+            if (!uri.Contains('?'))
+                return (uri, new NameValueCollection());
 
-            return GetResponse(OkStatusLine, "text/html; charset=utf-8", fileBytes);
-        }
-
-        private static byte[] FromFileResponse(string statusLine, string filePath, string contentType)
-            => GetResponse(statusLine, contentType, File.ReadAllBytes(filePath));
-
-        private static byte[] GetResponse(string statusLine, string contentType, byte[] body)
-        {
-            var head = new StringBuilder(statusLine);
-            head.Append($"Content-Type: {contentType}\r\n");
-            head.Append($"Content-Length: {body.Length}\r\n\r\n");
-            return CreateResponseBytes(head, body);
-        }
-
-        private static byte[] NotFoundResponse()
-        {
-            var head = new StringBuilder(_404StatusLine);
-            return CreateResponseBytes(head, Array.Empty<byte>());
-        }
-
-        // Собирает ответ в виде массива байт из байтов строки head и байтов body.
-        private static byte[] CreateResponseBytes(StringBuilder head, byte[] body)
-        {
-            byte[] headBytes = Encoding.ASCII.GetBytes(head.ToString());
-            byte[] responseBytes = new byte[headBytes.Length + body.Length];
-            Array.Copy(headBytes, responseBytes, headBytes.Length);
-            Array.Copy(body, 0,
-                responseBytes, headBytes.Length,
-                body.Length);
-            return responseBytes;
+            var fields = uri.Split('?');
+            return (fields[0], HttpUtility.ParseQueryString(fields[1]));
         }
 
         private static void Send(Socket clientSocket, byte[] responseBytes)
