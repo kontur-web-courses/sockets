@@ -22,6 +22,9 @@ namespace Sockets
 
     public class AsynchronousSocketListener
     {
+        private const string OkStatusLine = "HTTP/1.1 200 OK";
+        private const string _404StatusLine = "HTTP/1.1 404 Not Found\r\n";
+        
         private const int listeningPort = 11000;
         private static ManualResetEvent connectionEstablished = new ManualResetEvent(false);
 
@@ -163,28 +166,41 @@ namespace Sockets
             {
                 "/" or "/hello.html" => HomePageResponse(),
                 "/groot.gif" => GifResponse("groot.gif"),
+                "/time.html" => TimePageResponse(),
                 _ => NotFoundResponse(),
             };
         }
 
         private static byte[] HomePageResponse()
-            => FromFileResponse("HTTP/1.1 200 OK", "hello.html", "text/html; charset=utf-8");
+            => FromFileResponse(OkStatusLine, "hello.html", "text/html; charset=utf-8");
 
         private static byte[] GifResponse(string filePath) 
-            => FromFileResponse("HTTP/1.1 200 OK", filePath, "image/gif");
-        
-        private static byte[] FromFileResponse(string head, string filePath, string contentType)
+            => FromFileResponse(OkStatusLine, filePath, "image/gif");
+
+        private static byte[] TimePageResponse()
         {
-            var body = File.ReadAllBytes(filePath);
-            var headSb = new StringBuilder(head);
-            headSb.Append($"Content-Type: {contentType}\r\n");
-            headSb.Append($"Content-Length: {body.Length}\r\n\r\n");
-            return CreateResponseBytes(headSb, body);
+            var fileBytes = File.ReadAllBytes("time.template.html");
+            var file = Encoding.UTF8.GetString(fileBytes);
+            file = file.Replace("{{ServerTime}}", DateTime.Now.ToString(CultureInfo.InvariantCulture));
+            fileBytes = Encoding.UTF8.GetBytes(file);
+
+            return GetResponse(OkStatusLine, "text/html; charset=utf-8", fileBytes);
+        }
+
+        private static byte[] FromFileResponse(string statusLine, string filePath, string contentType)
+            => GetResponse(statusLine, contentType, File.ReadAllBytes(filePath));
+
+        private static byte[] GetResponse(string statusLine, string contentType, byte[] body)
+        {
+            var head = new StringBuilder(statusLine);
+            head.Append($"Content-Type: {contentType}\r\n");
+            head.Append($"Content-Length: {body.Length}\r\n\r\n");
+            return CreateResponseBytes(head, body);
         }
 
         private static byte[] NotFoundResponse()
         {
-            var head = new StringBuilder("HTTP/1.1 404 Not Found\r\n");
+            var head = new StringBuilder(_404StatusLine);
             return CreateResponseBytes(head, Array.Empty<byte>());
         }
 
