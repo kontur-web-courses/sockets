@@ -4,35 +4,90 @@ using System.Collections.Specialized;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Text;
 using System.Web;
 
 namespace Sockets
 {
-    public static class Response
+    public class Response
     {
         private static class ContentType
         {
             public const string TextUtf8 = "text/html; charset=utf-8";
             public const string Gif = "image/gif";
         }
-
+        
         private static class StatusLine
         {
             public const string Ok = "HTTP/1.1 200 OK\r\n";
             public const string NotFound = "HTTP/1.1 404 Not Found\r\n";
         }
 
-        public static byte[] HomePage(NameValueCollection queryString)
+        private readonly string address;
+        private readonly NameValueCollection queryString;
+        private string name;
+        private string cookieName;
+        private string cookie;
+        
+        public Response(Request request)
+        {
+            (address, queryString) = ParseUri(request.RequestUri);
+            name = queryString["name"];
+            if (name is not null)
+            {
+                var nameBytes = Encoding.UTF8.GetBytes(name);
+                cookie = $"name={Convert.ToBase64String(nameBytes)}";
+                return;
+            }
+            
+            var cookieStr = request.Headers.FirstOrDefault(h => h.Name == "Cookie")?.Value;
+            if (cookieStr is not null && ParseCookie(cookieStr).TryGetValue("name", out cookieName))
+            {
+                var cookieName64 = Convert.FromBase64String(cookieName);
+                cookieName = Encoding.UTF8.GetString(cookieName64);
+            }
+        }
+        
+        private static (string, NameValueCollection) ParseUri(string uri)
+        {
+            if (!uri.Contains('?'))
+                return (uri, new NameValueCollection());
+
+            var fields = uri.Split('?');
+            return (fields[0], HttpUtility.ParseQueryString(fields[1]));
+        }
+
+        private Dictionary<string, string> ParseCookie(string cookie)
+        {
+            return cookie
+                .Split(';')
+                .Select(s => s.Trim())
+                .Select(s => s.Split('='))
+                .ToDictionary(s => s[0], s => s[1]);
+        }
+
+        public byte[] ToBytes()
+        {
+            return address switch
+            {
+                "/" or "/hello.html" => HomePage(),
+                "/groot.gif" => Gif("groot.gif"),
+                "/time.html" => TimePage(),
+                _ => NotFound(),
+            };
+        }
+
+        private byte[] HomePage()
         {
             var greeting = queryString["greeting"] ?? "Hello";
-            var name = queryString["name"] ?? "World";
+            var name = this.name ?? cookieName;
+            name = name is null ? "World" : HttpUtility.HtmlEncode(name);
             greeting = HttpUtility.HtmlEncode(greeting);
-            name = HttpUtility.HtmlEncode(name);
             return HomePage(greeting, name);
         }
         
-        private static byte[] HomePage(string greeting, string name)
+        private byte[] HomePage(string greeting, string name)
             => FromFile("hello.html", ContentType.TextUtf8, 
                 new Dictionary<string, Func<string>>
                 {
@@ -40,20 +95,20 @@ namespace Sockets
                     {"World", () => name}
                 });
 
-        public static byte[] Gif(string filePath) 
+        private byte[] Gif(string filePath) 
             => FromFile(filePath, ContentType.Gif);
 
-        public static byte[] TimePage()
+        private byte[] TimePage()
             => FromFile("time.template.html", ContentType.TextUtf8, 
                 new Dictionary<string, Func<string>>
                 {
                     {"ServerTime", () => DateTime.Now.ToString(CultureInfo.InvariantCulture)}
                 });
 
-        private static byte[] FromFile(string filePath, string contentType)
+        private byte[] FromFile(string filePath, string contentType)
             => GetResponse(StatusLine.Ok,contentType, File.ReadAllBytes(filePath));
 
-        private static byte[] FromFile(
+        private byte[] FromFile(
             string filePath,
             string contentType,
             Dictionary<string, Func<string>> toReplace)
@@ -68,21 +123,25 @@ namespace Sockets
             return GetResponse(StatusLine.Ok, contentType, fileBytes);
         }
 
-        private static byte[] GetResponse(string statusLine, string contentType, byte[] body)
+        private byte[] GetResponse(string statusLine, string contentType, byte[] body)
         {
             var head = new StringBuilder(statusLine);
+            if (cookie is not null)
+            {
+                head.Append($"Set-cookie: {cookie}\r\n");
+            }
             head.Append($"Content-Type: {contentType}\r\n");
             head.Append($"Content-Length: {body.Length}\r\n\r\n");
             return CreateResponseBytes(head, body);
         }
 
-        public static byte[] NotFound()
+        private byte[] NotFound()
         {
             var head = new StringBuilder(StatusLine.NotFound);
             return CreateResponseBytes(head, Array.Empty<byte>());
         }
 
-        private static byte[] CreateResponseBytes(StringBuilder head, byte[] body)
+        private byte[] CreateResponseBytes(StringBuilder head, byte[] body)
         {
             byte[] headBytes = Encoding.ASCII.GetBytes(head.ToString());
             byte[] responseBytes = new byte[headBytes.Length + body.Length];

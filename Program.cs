@@ -162,23 +162,7 @@ namespace Sockets
 
         private static byte[] ProcessRequest(Request request)
         {
-            var (address, queryString) = ParseUri(request.RequestUri);
-            return address switch
-            {
-                "/" or "/hello.html" => Response.HomePage(queryString),
-                "/groot.gif" => Response.Gif("groot.gif"),
-                "/time.html" => Response.TimePage(),
-                _ => Response.NotFound(),
-            };
-        }
-
-        private static (string, NameValueCollection) ParseUri(string uri)
-        {
-            if (!uri.Contains('?'))
-                return (uri, new NameValueCollection());
-
-            var fields = uri.Split('?');
-            return (fields[0], HttpUtility.ParseQueryString(fields[1]));
+            return new Response(request).ToBytes();
         }
 
         private static void Send(Socket clientSocket, byte[] responseBytes)
