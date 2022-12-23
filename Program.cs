@@ -159,16 +159,27 @@ namespace Sockets
 
         private static byte[] ProcessRequest(Request request)
         {
-            if (request.RequestUri == "/" || request.RequestUri == "/hello.html")
+            return request.RequestUri switch
             {
-                var body = File.ReadAllBytes("hello.html");
-                var head = new StringBuilder("HTTP/1.1 200 OK\r\n");
-                head.Append("Content-Type: text/html; charset=utf-8\r\n");
-                head.Append($"Content-Length: {body.Length}\r\n\r\n");
-                
-                return CreateResponseBytes(head, body);
-            }
-            return NotFoundResponse();
+                "/" or "/hello.html" => HomePageResponse(),
+                "/groot.gif" => GifResponse("groot.gif"),
+                _ => NotFoundResponse(),
+            };
+        }
+
+        private static byte[] HomePageResponse()
+            => FromFileResponse("HTTP/1.1 200 OK", "hello.html", "text/html; charset=utf-8");
+
+        private static byte[] GifResponse(string filePath) 
+            => FromFileResponse("HTTP/1.1 200 OK", filePath, "image/gif");
+        
+        private static byte[] FromFileResponse(string head, string filePath, string contentType)
+        {
+            var body = File.ReadAllBytes(filePath);
+            var headSb = new StringBuilder(head);
+            headSb.Append($"Content-Type: {contentType}\r\n");
+            headSb.Append($"Content-Length: {body.Length}\r\n\r\n");
+            return CreateResponseBytes(headSb, body);
         }
 
         private static byte[] NotFoundResponse()
