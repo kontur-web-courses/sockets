@@ -162,7 +162,7 @@ namespace Sockets
             if (request.RequestUri == "/" || request.RequestUri == "/hello.html")
             {
                 var body = File.ReadAllBytes("hello.html");
-                var head = new StringBuilder("HTTP/1.1 404 Not Found\r\n");
+                var head = new StringBuilder("HTTP/1.1 200 OK\r\n");
                 head.Append("Content-Type: text/html; charset=utf-8\r\n");
                 head.Append($"Content-Length: {body.Length}\r\n\r\n");
                 
