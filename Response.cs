@@ -25,17 +25,19 @@ namespace Sockets
 
         public static byte[] HomePage(NameValueCollection queryString)
         {
-            var name = queryString["name"] ?? "World";
             var greeting = queryString["greeting"] ?? "Hello";
-            return HomePage(name, greeting);
+            var name = queryString["name"] ?? "World";
+            greeting = HttpUtility.HtmlEncode(greeting);
+            name = HttpUtility.HtmlEncode(name);
+            return HomePage(greeting, name);
         }
         
-        private static byte[] HomePage(string name, string greeting)
+        private static byte[] HomePage(string greeting, string name)
             => FromFile("hello.html", ContentType.TextUtf8, 
                 new Dictionary<string, Func<string>>
                 {
-                    {"World", () => name},
-                    {"Hello", () => greeting}
+                    {"Hello", () => greeting},
+                    {"World", () => name}
                 });
 
         public static byte[] Gif(string filePath) 
