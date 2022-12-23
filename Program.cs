@@ -22,6 +22,9 @@ namespace Sockets
 
     public class AsynchronousSocketListener
     {
+        private const string OkStatusLine = "HTTP/1.1 200 OK";
+        private const string _404StatusLine = "HTTP/1.1 404 Not Found\r\n";
+        
         private const int listeningPort = 11000;
         private static ManualResetEvent connectionEstablished = new ManualResetEvent(false);
 
@@ -159,22 +162,7 @@ namespace Sockets
 
         private static byte[] ProcessRequest(Request request)
         {
-            // TODO
-            var head = new StringBuilder("OK");
-            var body = new byte[0];
-            return CreateResponseBytes(head, body);
-        }
-
-        // Собирает ответ в виде массива байт из байтов строки head и байтов body.
-        private static byte[] CreateResponseBytes(StringBuilder head, byte[] body)
-        {
-            byte[] headBytes = Encoding.ASCII.GetBytes(head.ToString());
-            byte[] responseBytes = new byte[headBytes.Length + body.Length];
-            Array.Copy(headBytes, responseBytes, headBytes.Length);
-            Array.Copy(body, 0,
-                responseBytes, headBytes.Length,
-                body.Length);
-            return responseBytes;
+            return new Response(request).ToBytes();
         }
 
         private static void Send(Socket clientSocket, byte[] responseBytes)
