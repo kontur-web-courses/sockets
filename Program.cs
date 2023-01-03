@@ -49,6 +49,7 @@ namespace Sockets
                 Console.WriteLine(">>> Can't find IPv4 address for host");
                 return;
             }
+
             // По выбранному IP-адресу будем слушать listeningPort.
             IPEndPoint ipEndPoint = new IPEndPoint(ipV4Address, listeningPort);
 
@@ -145,7 +146,8 @@ namespace Sockets
                 {
                     // Все данные были получены от клиента.
                     // Для удобства выведем их на консоль.
-                    Console.WriteLine($">>> Received {receivedBytes.Length} bytes from {clientSocket.RemoteEndPoint}. Data:\n" +
+                    Console.WriteLine(
+                        $">>> Received {receivedBytes.Length} bytes from {clientSocket.RemoteEndPoint}. Data:\n" +
                         Encoding.ASCII.GetString(receivedBytes));
 
                     // Сформируем ответ.
@@ -159,19 +161,38 @@ namespace Sockets
 
         private static byte[] ProcessRequest(Request request)
         {
-            if (request.RequestUri is not ("/" or "/hello.html"))
-                return CreateResponseBytes(
-                    new StringBuilder("HTTP/1.1 404 Not Found\r\n\r\n"),
-                    Array.Empty<byte>()
-                );
-            
-            var body = File.ReadAllBytes("hello.html");
-            
-            var head = new StringBuilder("HTTP/1.1 200 OK\r\n");
-            head.Append("Content-Type: text/html; charset=utf-8\r\n");
-            head.Append($"Content-Length: {body.Length}\r\n\r\n");
+            var body = Array.Empty<byte>();
 
-            return CreateResponseBytes(head, body);
+            switch (request.RequestUri)
+            {
+                case "/":
+                case "/hello.html":
+                    body = File.ReadAllBytes("hello.html");
+                    return CreateResponseBytes(
+                        GetSuccessHttpHead("text/html", body.Length),
+                        body
+                    );
+                case "/groot.gif":
+                    body = File.ReadAllBytes("groot.gif");
+                    return CreateResponseBytes(
+                        GetSuccessHttpHead("image/gif", body.Length),
+                        body
+                    );
+                default:
+                    return CreateResponseBytes(
+                        new StringBuilder("HTTP/1.1 404 Not Found\r\n\r\n"),
+                        body
+                    );
+            }
+        }
+
+        private static StringBuilder GetSuccessHttpHead(string contentType, int contentLength)
+        {
+            var head = new StringBuilder("HTTP/1.1 200 OK\r\n");
+            head.Append($"Content-Type: {contentType}; charset=utf-8\r\n");
+            head.Append($"Content-Length: {contentLength}\r\n\r\n");
+
+            return head;
         }
 
         // Собирает ответ в виде массива байт из байтов строки head и байтов body.
