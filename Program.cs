@@ -178,8 +178,8 @@ namespace Sockets
                     }
 
                     var queryString = HttpUtility.ParseQueryString(uri[1]);
-                    var name = queryString["name"];
-                    var greeting = queryString["greeting"];
+                    var name = HttpUtility.HtmlEncode(queryString["name"]);
+                    var greeting = HttpUtility.HtmlEncode(queryString["greeting"]);
 
                     body = File.ReadAllBytes("hello.html");
 
