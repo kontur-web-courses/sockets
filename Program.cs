@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Collections.Specialized;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -168,9 +167,29 @@ namespace Sockets
             {
                 case "/":
                 case "/hello.html":
+                    body = File.ReadAllBytes("hello.html");
+
                     if (uri.Length == 1)
                     {
-                        body = File.ReadAllBytes("hello.html");
+                        var cookieName = request.Headers
+                            .FirstOrDefault(header => header.Name == "Cookie")
+                            ?.Value;
+
+                        cookieName = cookieName
+                            ?.Split(';')
+                            .First(pair => pair.StartsWith("name"))
+                            .Split('=')[1];
+
+                        if (cookieName == null)
+                        {
+                            return CreateResponseBytes(
+                                GetSuccessHttpHead("text/html", body.Length),
+                                body
+                            );
+                        }
+
+                        cookieName = HttpUtility.UrlDecode(cookieName);
+                        body = GetTemplateHelloBodyBytes(body, cookieName, null);
                         return CreateResponseBytes(
                             GetSuccessHttpHead("text/html", body.Length),
                             body
@@ -181,33 +200,11 @@ namespace Sockets
                     var name = HttpUtility.HtmlEncode(queryString["name"]);
                     var greeting = HttpUtility.HtmlEncode(queryString["greeting"]);
 
-                    body = File.ReadAllBytes("hello.html");
-
-                    var stringHello = Encoding.UTF8.GetString(body);
-
-                    if (name != null)
-                    {
-                        stringHello = stringHello.Replace(
-                            "{{World}}",
-                            name
-                        );
-                    }
-
-                    if (greeting != null)
-                    {
-                        stringHello = stringHello.Replace(
-                            "{{Hello}}",
-                            greeting
-                        );
-                    }
-
-                    body = Encoding.UTF8.GetBytes(stringHello);
-
+                    body = GetTemplateHelloBodyBytes(body, name, greeting);
                     return CreateResponseBytes(
-                        GetSuccessHttpHead("text/html", body.Length),
+                        GetSuccessHttpHead("text/html", body.Length, name),
                         body
                     );
-
                 case "/groot.gif":
                     body = File.ReadAllBytes("groot.gif");
                     return CreateResponseBytes(
@@ -237,10 +234,42 @@ namespace Sockets
             }
         }
 
-        private static StringBuilder GetSuccessHttpHead(string contentType, int contentLength)
+        private static byte[] GetTemplateHelloBodyBytes(byte[] body, string name, string greeting)
+        {
+            var stringHello = Encoding.UTF8.GetString(body);
+
+            if (name != null)
+            {
+                stringHello = stringHello.Replace(
+                    "{{World}}",
+                    name
+                );
+            }
+
+            if (greeting != null)
+            {
+                stringHello = stringHello.Replace(
+                    "{{Hello}}",
+                    greeting
+                );
+            }
+
+            body = Encoding.UTF8.GetBytes(stringHello);
+
+            return body;
+        }
+
+        private static StringBuilder GetSuccessHttpHead(string contentType, int contentLength, string name = null)
         {
             var head = new StringBuilder("HTTP/1.1 200 OK\r\n");
             head.Append($"Content-Type: {contentType}; charset=utf-8\r\n");
+
+            if (name != null)
+            {
+                name = HttpUtility.UrlEncode(name);
+                head.Append($"Set-Cookie: name={name}\r\n");
+            }
+
             head.Append($"Content-Length: {contentLength}\r\n\r\n");
 
             return head;
