@@ -178,6 +178,21 @@ namespace Sockets
                         GetSuccessHttpHead("image/gif", body.Length),
                         body
                     );
+                case "/time.html":
+                    body = File.ReadAllBytes("time.template.html");
+
+                    var stringBody = Encoding.UTF8.GetString(body);
+                    stringBody = stringBody.Replace(
+                        "{{ServerTime}}",
+                        DateTime.Now.ToString(CultureInfo.InvariantCulture)
+                    );
+
+                    body = Encoding.UTF8.GetBytes(stringBody);
+
+                    return CreateResponseBytes(
+                        GetSuccessHttpHead("text/html", body.Length),
+                        body
+                    );
                 default:
                     return CreateResponseBytes(
                         new StringBuilder("HTTP/1.1 404 Not Found\r\n\r\n"),
