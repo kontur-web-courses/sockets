@@ -162,16 +162,52 @@ namespace Sockets
         private static byte[] ProcessRequest(Request request)
         {
             var body = Array.Empty<byte>();
+            var uri = request.RequestUri.Split('?');
 
-            switch (request.RequestUri)
+            switch (uri[0])
             {
                 case "/":
                 case "/hello.html":
+                    if (uri.Length == 1)
+                    {
+                        body = File.ReadAllBytes("hello.html");
+                        return CreateResponseBytes(
+                            GetSuccessHttpHead("text/html", body.Length),
+                            body
+                        );
+                    }
+
+                    var queryString = HttpUtility.ParseQueryString(uri[1]);
+                    var name = queryString["name"];
+                    var greeting = queryString["greeting"];
+
                     body = File.ReadAllBytes("hello.html");
+
+                    var stringHello = Encoding.UTF8.GetString(body);
+
+                    if (name != null)
+                    {
+                        stringHello = stringHello.Replace(
+                            "{{World}}",
+                            name
+                        );
+                    }
+
+                    if (greeting != null)
+                    {
+                        stringHello = stringHello.Replace(
+                            "{{Hello}}",
+                            greeting
+                        );
+                    }
+
+                    body = Encoding.UTF8.GetBytes(stringHello);
+
                     return CreateResponseBytes(
                         GetSuccessHttpHead("text/html", body.Length),
                         body
                     );
+
                 case "/groot.gif":
                     body = File.ReadAllBytes("groot.gif");
                     return CreateResponseBytes(
@@ -181,13 +217,13 @@ namespace Sockets
                 case "/time.html":
                     body = File.ReadAllBytes("time.template.html");
 
-                    var stringBody = Encoding.UTF8.GetString(body);
-                    stringBody = stringBody.Replace(
+                    var stringTime = Encoding.UTF8.GetString(body);
+                    stringTime = stringTime.Replace(
                         "{{ServerTime}}",
                         DateTime.Now.ToString(CultureInfo.InvariantCulture)
                     );
 
-                    body = Encoding.UTF8.GetBytes(stringBody);
+                    body = Encoding.UTF8.GetBytes(stringTime);
 
                     return CreateResponseBytes(
                         GetSuccessHttpHead("text/html", body.Length),
