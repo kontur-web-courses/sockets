@@ -168,7 +168,7 @@ namespace Sockets
             {
                 "/" or "/hello.html" => SendHelloHtml(currentUri),
                 "/groot.gif" => SendFile("groot.gif", "image/gif"),
-                "/time.html" => SendTemplate("time.template.html", "text/html; charset=utf-8"),
+                "/time.html" => SendServerTime(),
                 _ => NotFoundError()
             };
         }
@@ -192,16 +192,29 @@ namespace Sockets
 
             var queryString = HttpUtility.ParseQueryString(requestUri.Split("?")[^1]);
 
-            var fileText = string.Join("\n", File.ReadAllLines("hello.html"));
-            return SendCustomBytes("text/html; charset=utf-8",
-                fileText
-                    .Replace("Hello", queryString["greeting"] ?? "Hello")
-                    .Replace("World", queryString["name"] ?? "World").ToHTTPBytes());
+            return SendTemplate("hello.html", "text/html; charset=utf-8", new Dictionary<string, string>()
+            {
+                {"Hello", queryString["greeting"] ?? "Hello"},
+                {"World", queryString["name"] ?? "World"}
+            });
         }
-        private static byte[] SendTemplate(string fileName, string type)
+
+        private static byte[] SendServerTime()
         {
-            var text = File.ReadAllText(fileName)
-                           .Replace("{{ServerTime}}", DateTime.Now.ToString(CultureInfo.InvariantCulture));
+            return SendTemplate("time.template.html", "text/html; charset=utf-8", new Dictionary<string, string>()
+            {
+                {"ServerTime", DateTime.Now.ToString(CultureInfo.InvariantCulture)}
+            });
+        }
+
+        private static byte[] SendTemplate(string fileName, string type, IDictionary<string, string> replacement)
+        {
+            var text = File.ReadAllText(fileName);
+            foreach (var (key, value) in replacement)
+            {
+                text = text.Replace("{{" + key + "}}", value);
+            }
+
             var bytes = Encoding.UTF8.GetBytes(text);
             return SendCustomBytes(type, bytes);
         }
