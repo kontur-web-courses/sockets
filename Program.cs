@@ -1,4 +1,5 @@
-﻿using System;
+﻿#nullable enable
+using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Globalization;
@@ -163,9 +164,9 @@ namespace Sockets
         {
             var currentUri = request.RequestUri;
 
-            return currentUri switch
+            return currentUri.Split("?")[0] switch
             {
-                "/" or "/hello.html" => SendFile("hello.html", "text/html; charset=utf-8"),
+                "/" or "/hello.html" => SendHelloHtml(currentUri),
                 "/groot.gif" => SendFile("groot.gif", "image/gif"),
                 "/time.html" => SendTemplate("time.template.html", "text/html; charset=utf-8"),
                 _ => NotFoundError()
@@ -182,18 +183,30 @@ namespace Sockets
         private static byte[] SendFile(string fileName, string type)
         {
             var bytes = File.ReadAllBytes(fileName);
-            return CreateAnswer(type, bytes);
+            return SendCustomBytes(type, bytes);
         }
 
+        private static byte[] SendHelloHtml(string requestUri)
+        {
+            if (!requestUri.Contains('?')) return SendFile("hello.html", "text/html; charset=utf-8");
+
+            var queryString = HttpUtility.ParseQueryString(requestUri.Split("?")[^1]);
+
+            var fileText = string.Join("\n", File.ReadAllLines("hello.html"));
+            return SendCustomBytes("text/html; charset=utf-8",
+                fileText
+                    .Replace("Hello", queryString["greeting"] ?? "Hello")
+                    .Replace("World", queryString["name"] ?? "World").ToHTTPBytes());
+        }
         private static byte[] SendTemplate(string fileName, string type)
         {
             var text = File.ReadAllText(fileName)
-                .Replace("{{ServerTime}}", DateTime.Now.ToString(CultureInfo.InvariantCulture));
+                           .Replace("{{ServerTime}}", DateTime.Now.ToString(CultureInfo.InvariantCulture));
             var bytes = Encoding.UTF8.GetBytes(text);
-            return CreateAnswer(type, bytes);
+            return SendCustomBytes(type, bytes);
         }
 
-        private static byte[] CreateAnswer(string type, byte[] bytes)
+        private static byte[] SendCustomBytes(string type, byte[] bytes)
         {
             var head = new StringBuilder();
             head.Append("HTTP/1.1 200 OK\r\n");
