@@ -177,9 +177,15 @@ namespace Sockets
                     var bodyString = Encoding.UTF8.GetString(body);
 
                     if (parameters["name"] is not null)
-                        bodyString = bodyString.Replace("{{World}}", parameters["name"]);
+                        bodyString = bodyString.Replace(
+                            "{{World}}", 
+                            HttpUtility.HtmlEncode(parameters["name"])
+                            );
                     if (parameters["greeting"] is not null)
-                        bodyString = bodyString.Replace("{{Hello}}", parameters["greeting"]);
+                        bodyString = bodyString.Replace(
+                            "{{Hello}}", 
+                            HttpUtility.HtmlEncode(parameters["greeting"])
+                            );
                     
                     body = Encoding.UTF8.GetBytes(bodyString);
                 }
