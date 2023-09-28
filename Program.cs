@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Collections.Specialized;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -49,6 +48,7 @@ namespace Sockets
                 Console.WriteLine(">>> Can't find IPv4 address for host");
                 return;
             }
+
             // По выбранному IP-адресу будем слушать listeningPort.
             IPEndPoint ipEndPoint = new IPEndPoint(ipV4Address, listeningPort);
 
@@ -98,7 +98,7 @@ namespace Sockets
             connectionEstablished.Set();
 
             // Получаем сокет к клиенту, с которым установлено соединение.
-            Socket connectionSocket = (Socket)asyncResult.AsyncState;
+            Socket connectionSocket = (Socket) asyncResult.AsyncState;
             Socket clientSocket = connectionSocket.EndAccept(asyncResult);
 
             // Принимаем данные от клиента.
@@ -119,7 +119,7 @@ namespace Sockets
         private static void ReceiveCallback(IAsyncResult asyncResult)
         {
             // Достаем клиентский сокет из параметра callback.
-            ReceivingState receivingState = (ReceivingState)asyncResult.AsyncState;
+            ReceivingState receivingState = (ReceivingState) asyncResult.AsyncState;
             Socket clientSocket = receivingState.ClientSocket;
 
             // Читаем данные из клиентского сокета.
@@ -145,7 +145,8 @@ namespace Sockets
                 {
                     // Все данные были получены от клиента.
                     // Для удобства выведем их на консоль.
-                    Console.WriteLine($">>> Received {receivedBytes.Length} bytes from {clientSocket.RemoteEndPoint}. Data:\n" +
+                    Console.WriteLine(
+                        $">>> Received {receivedBytes.Length} bytes from {clientSocket.RemoteEndPoint}. Data:\n" +
                         Encoding.ASCII.GetString(receivedBytes));
 
                     // Сформируем ответ.
@@ -159,10 +160,97 @@ namespace Sockets
 
         private static byte[] ProcessRequest(Request request)
         {
-            // TODO
-            var head = new StringBuilder("OK");
-            var body = new byte[0];
+            var currentUri = request.RequestUri;
+
+            return currentUri.Split("?")[0] switch
+            {
+                "/" or "/hello.html" => SendHelloHtml(request),
+                "/groot.gif" => SendFile("groot.gif", "image/gif"),
+                "/time.html" => SendServerTime(),
+                _ => NotFoundError()
+            };
+        }
+
+        private static byte[] NotFoundError()
+        {
+            var head = new StringBuilder("HTTP/1.1 404 Not Found\r\n");
+            var body = Array.Empty<byte>();
             return CreateResponseBytes(head, body);
+        }
+
+        private static byte[] SendFile(string fileName, string type)
+        {
+            var bytes = File.ReadAllBytes(fileName);
+            return CreateAnswer(type, bytes);
+        }
+
+        private static byte[] SendHelloHtml(Request request)
+        {
+            var queryString = HttpUtility.ParseQueryString(request.RequestUri.Split("?")[^1]);
+
+            var cookie = request.Headers
+                .FirstOrDefault(x => x.Name == "Cookie")
+                ?.Value
+                .Split("; ", StringSplitOptions.RemoveEmptyEntries)
+                .Select(x =>
+                {
+                    var t = x.Split("=");
+                    return (t[0], HttpUtility.UrlDecode(t[1]));
+                })
+                .ToDictionary(k => k.Item1, v => v.Item2);
+
+
+            var name = queryString["name"] ?? cookie?["name"];
+
+            return SendTemplate("hello.html", "text/html; charset=utf-8", new Dictionary<string, string>()
+                {
+                    {"Hello", HttpUtility.HtmlEncode(queryString["greeting"]) ?? "Hello"},
+                    {"World", HttpUtility.HtmlEncode(name) ?? "World"}
+                },
+                new Dictionary<string, string>
+                {
+                    {"name", name}
+                });
+        }
+
+        private static byte[] SendServerTime()
+        {
+            return SendTemplate("time.template.html", "text/html; charset=utf-8", new Dictionary<string, string>()
+            {
+                {"ServerTime", DateTime.Now.ToString(CultureInfo.InvariantCulture)}
+            });
+        }
+
+        private static byte[] SendTemplate(string fileName, string type, IDictionary<string, string> replacement,
+            Dictionary<string, string>? cookies = null)
+        {
+            var text = File.ReadAllText(fileName);
+            foreach (var (key, value) in replacement)
+            {
+                text = text.Replace("{{" + key + "}}", value);
+            }
+
+            var bytes = Encoding.UTF8.GetBytes(text);
+            return CreateAnswer(type, bytes, cookies);
+        }
+
+        private static byte[] CreateAnswer(string type, byte[] bytes, Dictionary<string, string>? cookies = null)
+        {
+            var head = new StringBuilder();
+            head.Append("HTTP/1.1 200 OK\r\n");
+            head.Append($"Content-Type: {type}\r\n");
+            head.Append($"Content-Length: {bytes.Length}\r\n");
+
+            if (cookies is not null)
+            {
+                foreach (var (k, v) in cookies)
+                {
+                    head.Append($"Set-Cookie: {k}={HttpUtility.UrlEncode(v)}\r\n");
+                }
+            }
+
+            head.Append("\r\n");
+            return CreateResponseBytes(head, bytes);
         }
 
         // Собирает ответ в виде массива байт из байтов строки head и байтов body.
@@ -188,7 +276,7 @@ namespace Sockets
         private static void SendCallback(IAsyncResult asyncResult)
         {
             // Достаем клиентский сокет из параметра callback.
-            Socket clientSocket = (Socket)asyncResult.AsyncState;
+            Socket clientSocket = (Socket) asyncResult.AsyncState;
             try
             {
                 // Завершаем отправку данных клиенту.
@@ -206,6 +294,14 @@ namespace Sockets
                 Console.WriteLine(e.ToString());
                 Console.WriteLine(">>> ");
             }
+        }
+    }
+
+    public static class StringExt
+    {
+        public static byte[] ToHTTPBytes(this string str)
+        {
+            return Encoding.ASCII.GetBytes(str + "\r\n");
         }
     }
 }
