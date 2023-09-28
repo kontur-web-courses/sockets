@@ -185,8 +185,8 @@ namespace Sockets
             {
                 case "/" or "/hello.html":
                     body = File.ReadAllBytes("hello.html");
-                    var name = query["name"];
-                    var greeting = query["greeting"];
+                    var name = HttpUtility.HtmlEncode(query["name"]);
+                    var greeting = HttpUtility.HtmlEncode(query["greeting"]);
                     var s = Encoding.UTF8.GetString(body)
                         .Replace("{{World}}", name)
                         .Replace("{{Hello}}", greeting);
