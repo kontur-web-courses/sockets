@@ -164,12 +164,24 @@ namespace Sockets
             var path = request.RequestUri;
             var head = new StringBuilder("HTTP/1.1 404 Not Found\r\n\r\n");
             var body = new byte[0];
-            switch (path)
+            var arr = path.Split("?");
+            switch (arr[0])
             {
                 case "/" or "/hello.html":
+                    var bodyStr = Encoding.UTF8.GetString(File.ReadAllBytes("hello.html"));
+                    if (arr.Length > 1)
+                    {
+                        var nameValueCollection = HttpUtility.ParseQueryString(arr[1]);
+                        Console.WriteLine(nameValueCollection["name"]);
+                        if (nameValueCollection["name"] is not null)
+                            bodyStr = bodyStr.Replace("{{World}}", nameValueCollection["name"]);
+                        if (nameValueCollection["greeting"] is not null)
+                            bodyStr = bodyStr.Replace("{{Hello}}", nameValueCollection["greeting"]);
+                    }
+
+                    body = Encoding.UTF8.GetBytes(bodyStr);
                     head = new StringBuilder("HTTP/1.1 200 OK\r\n");
                     head.Append("Content-Type: text/html; charset=utf-8\r\n");
-                    body = File.ReadAllBytes("hello.html");
                     head.Append($"Content-Length: {body.Length}\r\n\r\n");
                     break;
                 case "/groot.gif":
