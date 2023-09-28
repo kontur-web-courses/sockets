@@ -162,7 +162,16 @@ namespace Sockets
             // TODO
             var head = new StringBuilder("HTTP/1.1 404 Not Found\r\n");
             var body = Array.Empty<byte>();
+            var endpoint = request.RequestUri;
+            switch (endpoint)
+            {
+                case "/" or "/hello.html":
+                    body = File.ReadAllBytes("hello.html");
+                    head = new StringBuilder($"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {body.Length}\r\n\r\n");
+                    break;
+            }
             return CreateResponseBytes(head, body);
+
         }
 
         // Собирает ответ в виде массива байт из байтов строки head и байтов body.
