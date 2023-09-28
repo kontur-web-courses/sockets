@@ -159,7 +159,7 @@ namespace Sockets
 
         private static byte[] ProcessRequest(Request request)
         {
-            var head = new StringBuilder("HTTP/1.1 404 Not Found\r\n");
+            var head = new StringBuilder("HTTP/1.1 404 Not Found\r\nnContent-Length: 0\r\n");
             var body = new byte[0];
             return CreateResponseBytes(head, body);
         }
