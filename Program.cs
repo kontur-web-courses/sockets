@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Collections.Specialized;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -49,6 +48,7 @@ namespace Sockets
                 Console.WriteLine(">>> Can't find IPv4 address for host");
                 return;
             }
+
             // По выбранному IP-адресу будем слушать listeningPort.
             IPEndPoint ipEndPoint = new IPEndPoint(ipV4Address, listeningPort);
 
@@ -145,7 +145,8 @@ namespace Sockets
                 {
                     // Все данные были получены от клиента.
                     // Для удобства выведем их на консоль.
-                    Console.WriteLine($">>> Received {receivedBytes.Length} bytes from {clientSocket.RemoteEndPoint}. Data:\n" +
+                    Console.WriteLine(
+                        $">>> Received {receivedBytes.Length} bytes from {clientSocket.RemoteEndPoint}. Data:\n" +
                         Encoding.ASCII.GetString(receivedBytes));
 
                     // Сформируем ответ.
@@ -159,10 +160,119 @@ namespace Sockets
 
         private static byte[] ProcessRequest(Request request)
         {
-            // TODO
-            var head = new StringBuilder("OK");
-            var body = new byte[0];
-            return CreateResponseBytes(head, body);
+            var body = Array.Empty<byte>();
+            var uri = request.RequestUri.Split('?');
+
+            switch (uri[0])
+            {
+                case "/":
+                case "/hello.html":
+                    body = File.ReadAllBytes("hello.html");
+
+                    if (uri.Length == 1)
+                    {
+                        var cookieName = request.Headers
+                            .FirstOrDefault(header => header.Name == "Cookie")
+                            ?.Value;
+
+                        cookieName = cookieName
+                            ?.Split(';')
+                            .First(pair => pair.StartsWith("name"))
+                            .Split('=')[1];
+
+                        if (cookieName == null)
+                        {
+                            return CreateResponseBytes(
+                                GetSuccessHttpHead("text/html", body.Length),
+                                body
+                            );
+                        }
+
+                        cookieName = HttpUtility.UrlDecode(cookieName);
+                        body = GetTemplateHelloBodyBytes(body, cookieName, null);
+                        return CreateResponseBytes(
+                            GetSuccessHttpHead("text/html", body.Length),
+                            body
+                        );
+                    }
+
+                    var queryString = HttpUtility.ParseQueryString(uri[1]);
+                    var name = HttpUtility.HtmlEncode(queryString["name"]);
+                    var greeting = HttpUtility.HtmlEncode(queryString["greeting"]);
+
+                    body = GetTemplateHelloBodyBytes(body, name, greeting);
+                    return CreateResponseBytes(
+                        GetSuccessHttpHead("text/html", body.Length, name),
+                        body
+                    );
+                case "/groot.gif":
+                    body = File.ReadAllBytes("groot.gif");
+                    return CreateResponseBytes(
+                        GetSuccessHttpHead("image/gif", body.Length),
+                        body
+                    );
+                case "/time.html":
+                    body = File.ReadAllBytes("time.template.html");
+
+                    var stringTime = Encoding.UTF8.GetString(body);
+                    stringTime = stringTime.Replace(
+                        "{{ServerTime}}",
+                        DateTime.Now.ToString(CultureInfo.InvariantCulture)
+                    );
+
+                    body = Encoding.UTF8.GetBytes(stringTime);
+
+                    return CreateResponseBytes(
+                        GetSuccessHttpHead("text/html", body.Length),
+                        body
+                    );
+                default:
+                    return CreateResponseBytes(
+                        new StringBuilder("HTTP/1.1 404 Not Found\r\n\r\n"),
+                        body
+                    );
+            }
+        }
+
+        private static byte[] GetTemplateHelloBodyBytes(byte[] body, string name, string greeting)
+        {
+            var stringHello = Encoding.UTF8.GetString(body);
+
+            if (name != null)
+            {
+                stringHello = stringHello.Replace(
+                    "{{World}}",
+                    name
+                );
+            }
+
+            if (greeting != null)
+            {
+                stringHello = stringHello.Replace(
+                    "{{Hello}}",
+                    greeting
+                );
+            }
+
+            body = Encoding.UTF8.GetBytes(stringHello);
+
+            return body;
+        }
+
+        private static StringBuilder GetSuccessHttpHead(string contentType, int contentLength, string name = null)
+        {
+            var head = new StringBuilder("HTTP/1.1 200 OK\r\n");
+            head.Append($"Content-Type: {contentType}; charset=utf-8\r\n");
+
+            if (name != null)
+            {
+                name = HttpUtility.UrlEncode(name);
+                head.Append($"Set-Cookie: name={name}\r\n");
+            }
+
+            head.Append($"Content-Length: {contentLength}\r\n\r\n");
+
+            return head;
         }
 
         // Собирает ответ в виде массива байт из байтов строки head и байтов body.
