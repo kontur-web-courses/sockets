@@ -8,6 +8,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Threading;
 using System.Web;
 
@@ -194,8 +195,8 @@ namespace Sockets
 
             return SendTemplate("hello.html", "text/html; charset=utf-8", new Dictionary<string, string>()
             {
-                {"Hello", queryString["greeting"] ?? "Hello"},
-                {"World", queryString["name"] ?? "World"}
+                {"Hello", HttpUtility.HtmlEncode(queryString["greeting"]) ?? "Hello"},
+                {"World", HttpUtility.HtmlEncode(queryString["name"]) ?? "World"}
             });
         }
 
