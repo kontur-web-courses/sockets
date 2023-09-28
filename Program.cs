@@ -161,13 +161,20 @@ namespace Sockets
         {
             var head = new StringBuilder();
             var body = new byte[0];
-            
+
             if (request.RequestUri is "/" or "/hello.html")
             {
                 body = File.ReadAllBytes("/hello.html");
                 head.Append("HTTP/1.1 200 OK\r\n")
                     .Append($"Content-Length: {body.Length}")
                     .Append("Content-Type: text/html; charset=utf-8");
+            }
+            else if (request.RequestUri is "/groot.gif")
+            {
+                body = File.ReadAllBytes("/groot.gif");
+                head.Append("HTTP/1.1 200 OK\r\n")
+                    .Append($"Content-Length: {body.Length}")
+                    .Append("Content-Type: image/gif");
             }
             else
             {
