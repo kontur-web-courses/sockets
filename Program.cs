@@ -166,14 +166,6 @@ namespace Sockets
             return sb;
         }
 
-        private static string GetContentType(params string[] types)
-        {
-            var sb = new StringBuilder("Content-Type: ");
-            foreach (var type in string.Join("; ", types))
-                sb.Append(type);
-            return sb.ToString();
-        }
-
         private static string OkHeader => "HTTP/1.1 200 OK";
         private static string ErrorHeader => "HTTP/1.1 404 Not Found";
 
@@ -182,13 +174,20 @@ namespace Sockets
             var head = CreateHeader(ErrorHeader);
             var body = Array.Empty<byte>();
             var endpoint = request.RequestUri;
+            var type = string.Empty;
             switch (endpoint)
             {
                 case "/" or "/hello.html":
                     body = File.ReadAllBytes("hello.html");
-                    head = CreateHeader(OkHeader, GetContentType("text/html", "charset=utf-8"), $"Content-Length: {body.Length}");
+                    type = "text/html";
+                    break;
+                case "/groot.gif":
+                    body = File.ReadAllBytes("groot.gif");
+                    type = "image/gif";
                     break;
             }
+            if (body.Length != 0)
+                head = CreateHeader(OkHeader, $"Content-Type: {type}; charset=utf-8", $"Content-Length: {body.Length}");
             return CreateResponseBytes(head, body);
 
         }
