@@ -38,9 +38,9 @@ namespace Sockets
             // Определяем IP-адрес, по которому будем принимать сообщения.
             // Для этого сначала получаем DNS-имя компьютера,
             // а из всех адресов выбираем первый попавшийся IPv4 адрес.
-            string hostName = Dns.GetHostName();
-            IPHostEntry ipHostEntry = Dns.GetHostEntry(hostName);
-            IPAddress ipV4Address = ipHostEntry.AddressList
+            var hostName = Dns.GetHostName();
+            var ipHostEntry = Dns.GetHostEntry(hostName);
+            var ipV4Address = ipHostEntry.AddressList
                 .Where(address => address.AddressFamily == AddressFamily.InterNetwork)
                 .OrderBy(address => address.ToString())
                 .FirstOrDefault();
@@ -50,10 +50,10 @@ namespace Sockets
                 return;
             }
             // По выбранному IP-адресу будем слушать listeningPort.
-            IPEndPoint ipEndPoint = new IPEndPoint(ipV4Address, listeningPort);
+            var ipEndPoint = new IPEndPoint(ipV4Address, listeningPort);
 
             // Создаем TCP/IP сокет для приема соединений.
-            Socket connectionSocket = new Socket(ipV4Address.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+            var connectionSocket = new Socket(ipV4Address.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
 
             try
             {
@@ -159,16 +159,72 @@ namespace Sockets
 
         private static byte[] ProcessRequest(Request request)
         {
-            // TODO
-            var head = new StringBuilder("OK");
-            var body = new byte[0];
-            return CreateResponseBytes(head, body);
+            var uri = request.RequestUri;
+            var uriArray = uri.Split('?');
+            var path = uriArray[0];
+            var parameters = uriArray.Length > 1 ? uriArray[1] : null;
+            switch (path)
+            {
+                case "/":
+                case "/hello.html":
+                {
+                    var body = File.ReadAllBytes("hello.html");
+                    var head = new StringBuilder($"200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {body.Length}");
+                    var nameCookie = request.Headers
+                        .Where(header => header.Name == "Cookie")
+                        .Select(header => header.Value)
+                        .Select(HttpUtility.UrlDecode)
+                        .FirstOrDefault();
+                    if (nameCookie != null)
+                    {
+                        var name = nameCookie.Split('=')[1];
+                        var bodyString = Encoding.UTF8.GetString(body).Replace("{{World}}", name);
+                        body = Encoding.UTF8.GetBytes(bodyString);
+                    }
+                    if (parameters != null)
+                    {
+                        var collection = HttpUtility.ParseQueryString(parameters);
+                        var greeting = collection["greeting"];
+                        var name = collection["name"];
+                        if (greeting != null)
+                        {
+                            greeting = HttpUtility.HtmlEncode(greeting);
+                            var bodyString = Encoding.UTF8.GetString(body).Replace("{{Hello}}", greeting);
+                            body = Encoding.UTF8.GetBytes(bodyString);
+                        }
+                        if (name != null)
+                        {
+                            name = HttpUtility.HtmlEncode(name);
+                            head.Append($"\r\nSet-Cookie: name={HttpUtility.UrlEncode(name)}");
+                            var bodyString = Encoding.UTF8.GetString(body).Replace("{{World}}", name);
+                            body = Encoding.UTF8.GetBytes(bodyString);
+                        }
+                    }
+                    return CreateResponseBytes(head, body);
+                }
+                case "/groot.gif":
+                {
+                    var body = File.ReadAllBytes("groot.gif");
+                    var head = new StringBuilder($"200 OK\r\nContent-Type: image/gif\r\nContent-Length: {body.Length}");
+                    return CreateResponseBytes(head, body);
+                }
+                case "/time.html":
+                {
+                    var body = File.ReadAllBytes("time.template.html");
+                    var bodyString = Encoding.UTF8.GetString(body).Replace("{{ServerTime}}", DateTime.Now.ToString());
+                    body = Encoding.UTF8.GetBytes(bodyString);
+                    var head = new StringBuilder($"200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {body.Length}");
+                    return CreateResponseBytes(head, body);
+                }
+            }
+            
+            return CreateResponseBytes(new StringBuilder("404 Not Found"), Array.Empty<byte>());
         }
 
         // Собирает ответ в виде массива байт из байтов строки head и байтов body.
         private static byte[] CreateResponseBytes(StringBuilder head, byte[] body)
         {
-            byte[] headBytes = Encoding.ASCII.GetBytes(head.ToString());
+            byte[] headBytes = Encoding.ASCII.GetBytes($"HTTP/1.1 {head}\r\n\r\n");
             byte[] responseBytes = new byte[headBytes.Length + body.Length];
             Array.Copy(headBytes, responseBytes, headBytes.Length);
             Array.Copy(body, 0,

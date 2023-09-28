@@ -32,18 +32,22 @@ namespace Sockets
         // Структура http-запроса: https://www.w3.org/Protocols/rfc2616/rfc2616-sec5.html
         public static Request StupidParse(byte[] requestBytes)
         {
-            string requestString = Encoding.ASCII.GetString(requestBytes);
+            var requestString = Encoding.ASCII.GetString(requestBytes);
 
-            RequestLine requestLine = ParseRequestLine(requestString, out int readCharsCount);
+            var requestLine = ParseRequestLine(requestString, out int readCharsCount);
 
-            List<Header> headers = ParseHeaders(requestString, ref readCharsCount);
+            var headers = ParseHeaders(requestString, ref readCharsCount);
             if (headers == null)
+            {
                 return null;
+            }
 
-            int readBytesCount = Encoding.ASCII.GetBytes(requestString.Substring(0, readCharsCount)).Length;
-            byte[] messageBody = ParseMessageBody(requestBytes, headers, readBytesCount);
+            var readBytesCount = Encoding.ASCII.GetBytes(requestString.Substring(0, readCharsCount)).Length;
+            var messageBody = ParseMessageBody(requestBytes, headers, readBytesCount);
             if (messageBody == null)
+            {
                 return null;
+            }
 
             return new Request
             {
