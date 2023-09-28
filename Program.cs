@@ -217,7 +217,7 @@ namespace Sockets
     {
         public static byte[] ToHTTPBytes(this string str)
         {
-            return str.Select(x => (byte) x).ToArray();
+            return Encoding.ASCII.GetBytes(str + "\r\n");
         }
     }
 }
