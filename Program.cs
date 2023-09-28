@@ -1,14 +1,11 @@
-﻿#nullable enable
-using System;
+﻿using System;
 using System.Collections.Generic;
-using System.Collections.Specialized;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
-using System.Text.Encodings.Web;
 using System.Threading;
 using System.Web;
 
@@ -43,9 +40,9 @@ namespace Sockets
             string hostName = Dns.GetHostName();
             IPHostEntry ipHostEntry = Dns.GetHostEntry(hostName);
             IPAddress ipV4Address = ipHostEntry.AddressList
-                                               .Where(address => address.AddressFamily == AddressFamily.InterNetwork)
-                                               .OrderBy(address => address.ToString())
-                                               .FirstOrDefault();
+                .Where(address => address.AddressFamily == AddressFamily.InterNetwork)
+                .OrderBy(address => address.ToString())
+                .FirstOrDefault();
             if (ipV4Address == null)
             {
                 Console.WriteLine(">>> Can't find IPv4 address for host");
@@ -167,7 +164,7 @@ namespace Sockets
 
             return currentUri.Split("?")[0] switch
             {
-                "/" or "/hello.html" => SendHelloHtml(currentUri),
+                "/" or "/hello.html" => SendHelloHtml(request),
                 "/groot.gif" => SendFile("groot.gif", "image/gif"),
                 "/time.html" => SendServerTime(),
                 _ => NotFoundError()
@@ -184,20 +181,36 @@ namespace Sockets
         private static byte[] SendFile(string fileName, string type)
         {
             var bytes = File.ReadAllBytes(fileName);
-            return SendCustomBytes(type, bytes);
+            return CreateAnswer(type, bytes);
         }
 
-        private static byte[] SendHelloHtml(string requestUri)
+        private static byte[] SendHelloHtml(Request request)
         {
-            if (!requestUri.Contains('?')) return SendFile("hello.html", "text/html; charset=utf-8");
+            var queryString = HttpUtility.ParseQueryString(request.RequestUri.Split("?")[^1]);
 
-            var queryString = HttpUtility.ParseQueryString(requestUri.Split("?")[^1]);
+            var cookie = request.Headers
+                .FirstOrDefault(x => x.Name == "Cookie")
+                ?.Value
+                .Split("; ", StringSplitOptions.RemoveEmptyEntries)
+                .Select(x =>
+                {
+                    var t = x.Split("=");
+                    return (t[0], HttpUtility.UrlDecode(t[1]));
+                })
+                .ToDictionary(k => k.Item1, v => v.Item2);
+
+
+            var name = queryString["name"] ?? cookie?["name"];
 
             return SendTemplate("hello.html", "text/html; charset=utf-8", new Dictionary<string, string>()
-            {
-                {"Hello", HttpUtility.HtmlEncode(queryString["greeting"]) ?? "Hello"},
-                {"World", HttpUtility.HtmlEncode(queryString["name"]) ?? "World"}
-            });
+                {
+                    {"Hello", HttpUtility.HtmlEncode(queryString["greeting"]) ?? "Hello"},
+                    {"World", HttpUtility.HtmlEncode(name) ?? "World"}
+                },
+                new Dictionary<string, string>
+                {
+                    {"name", name}
+                });
         }
 
         private static byte[] SendServerTime()
@@ -208,7 +221,8 @@ namespace Sockets
             });
         }
 
-        private static byte[] SendTemplate(string fileName, string type, IDictionary<string, string> replacement)
+        private static byte[] SendTemplate(string fileName, string type, IDictionary<string, string> replacement,
+            Dictionary<string, string>? cookies = null)
         {
             var text = File.ReadAllText(fileName);
             foreach (var (key, value) in replacement)
@@ -217,15 +231,25 @@ namespace Sockets
             }
 
             var bytes = Encoding.UTF8.GetBytes(text);
-            return SendCustomBytes(type, bytes);
+            return CreateAnswer(type, bytes, cookies);
         }
 
-        private static byte[] SendCustomBytes(string type, byte[] bytes)
+        private static byte[] CreateAnswer(string type, byte[] bytes, Dictionary<string, string>? cookies = null)
         {
             var head = new StringBuilder();
             head.Append("HTTP/1.1 200 OK\r\n");
             head.Append($"Content-Type: {type}\r\n");
-            head.Append($"Content-Length:{bytes.Length}\r\n\r\n");
+            head.Append($"Content-Length: {bytes.Length}\r\n");
+
+            if (cookies is not null)
+            {
+                foreach (var (k, v) in cookies)
+                {
+                    head.Append($"Set-Cookie: {k}={HttpUtility.UrlEncode(v)}\r\n");
+                }
+            }
+
+            head.Append("\r\n");
             return CreateResponseBytes(head, bytes);
         }
 
