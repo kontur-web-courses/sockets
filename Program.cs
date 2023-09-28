@@ -157,17 +157,28 @@ namespace Sockets
             }
         }
 
+        private static StringBuilder CreateHeader(params string[] parameters)
+        {
+            var sb = new StringBuilder();
+            foreach (var s in parameters)
+                sb.Append(s + "\r\n");
+            sb.Append("\r\n");
+            return sb;
+        }
+
+        private static string OkHeader => "HTTP/1.1 200 OK";
+        private static string ErrorHeader => "HTTP/1.1 404 Not Found";
+
         private static byte[] ProcessRequest(Request request)
         {
-            // TODO
-            var head = new StringBuilder("HTTP/1.1 404 Not Found\r\n");
+            var head = CreateHeader(ErrorHeader);
             var body = Array.Empty<byte>();
             var endpoint = request.RequestUri;
             switch (endpoint)
             {
                 case "/" or "/hello.html":
                     body = File.ReadAllBytes("hello.html");
-                    head = new StringBuilder($"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {body.Length}\r\n\r\n");
+                    head = CreateHeader(OkHeader, "Content-Type: text/html; charset=utf-8", $"Content-Length: {body.Length}");
                     break;
             }
             return CreateResponseBytes(head, body);
