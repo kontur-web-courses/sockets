@@ -176,6 +176,22 @@ namespace Sockets
                     .Append($"Content-Length: {body.Length}")
                     .Append("Content-Type: image/gif");
             }
+            else if (request.RequestUri is "/time.html")
+            {
+                var template = Encoding.UTF8.GetString(
+                    File.ReadAllBytes("time.template.html"));
+
+                template = template.Replace(
+                    "{{ServerTime}}", 
+                    DateTime.Now.ToString(CultureInfo.InvariantCulture)
+                    );
+                
+                body = Encoding.UTF8.GetBytes(template);
+                
+                head.Append("HTTP/1.1 200 OK\r\n")
+                    .Append($"Content-Length: {body.Length}")
+                    .Append("Content-Type: text/html; charset=utf-8");
+            }
             else
             {
                 head.Append("HTTP/1.1 404 Not Found\r\n")
