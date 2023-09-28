@@ -49,6 +49,7 @@ namespace Sockets
                 Console.WriteLine(">>> Can't find IPv4 address for host");
                 return;
             }
+
             // По выбранному IP-адресу будем слушать listeningPort.
             IPEndPoint ipEndPoint = new IPEndPoint(ipV4Address, listeningPort);
 
@@ -145,7 +146,8 @@ namespace Sockets
                 {
                     // Все данные были получены от клиента.
                     // Для удобства выведем их на консоль.
-                    Console.WriteLine($">>> Received {receivedBytes.Length} bytes from {clientSocket.RemoteEndPoint}. Data:\n" +
+                    Console.WriteLine(
+                        $">>> Received {receivedBytes.Length} bytes from {clientSocket.RemoteEndPoint}. Data:\n" +
                         Encoding.ASCII.GetString(receivedBytes));
 
                     // Сформируем ответ.
@@ -160,6 +162,16 @@ namespace Sockets
         private static byte[] ProcessRequest(Request request)
         {
             // TODO
+            if (request.RequestUri == "/" || request.RequestUri == "/hello.html")
+            {
+                var body1 = File.ReadAllBytes("hello.html");
+                var head1 = new StringBuilder(
+                    "HTTP/1.1 200 OK\r\n" +
+                    "Content-Type: text/html; charset=utf-8\r\n" +
+                    "Content-Length: {body1.Length}\r\n\r\n");
+                return CreateResponseBytes(head1, body1);
+            }
+
             var head = new StringBuilder("HTTP/1.1 404 Not Found\r\n");
             var body = new byte[0];
             return CreateResponseBytes(head, body);
