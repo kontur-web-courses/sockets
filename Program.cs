@@ -167,6 +167,7 @@ namespace Sockets
             {
                 "/" or "/hello.html" => SendFile("hello.html", "text/html; charset=utf-8"),
                 "/groot.gif" => SendFile("groot.gif", "image/gif"),
+                "/time.html" => SendTemplate("time.template.html", "text/html; charset=utf-8"),
                 _ => NotFoundError()
             };
         }
@@ -181,13 +182,26 @@ namespace Sockets
         private static byte[] SendFile(string fileName, string type)
         {
             var bytes = File.ReadAllBytes(fileName);
+            return CreateAnswer(type, bytes);
+        }
+
+        private static byte[] SendTemplate(string fileName, string type)
+        {
+            var text = File.ReadAllText(fileName)
+                .Replace("{{ServerTime}}", DateTime.Now.ToString(CultureInfo.InvariantCulture));
+            var bytes = Encoding.UTF8.GetBytes(text);
+            return CreateAnswer(type, bytes);
+        }
+
+        private static byte[] CreateAnswer(string type, byte[] bytes)
+        {
             var head = new StringBuilder();
             head.Append("HTTP/1.1 200 OK\r\n");
             head.Append($"Content-Type: {type}\r\n");
             head.Append($"Content-Length:{bytes.Length}\r\n\r\n");
             return CreateResponseBytes(head, bytes);
         }
-        
+
         // Собирает ответ в виде массива байт из байтов строки head и байтов body.
         private static byte[] CreateResponseBytes(StringBuilder head, byte[] body)
         {
