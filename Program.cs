@@ -163,24 +163,12 @@ namespace Sockets
         {
             var currentUri = request.RequestUri;
 
-            if (currentUri is "/" or "/hello.html")
+            return currentUri switch
             {
-                return HelloHtml();
-            }
-
-            if (currentUri is "/groot.gif")
-            {
-                var bytes = File.ReadAllBytes("groot.gif");
-                var head = new StringBuilder(
-                    $@"HTTP/1.1 200 OK
-                    Content-Type: image/gif
-                    Content-Length:{bytes.Length}
-
-                    ");
-                return CreateResponseBytes(head, bytes);
-            }
-
-            return NotFoundError();
+                "/" or "/hello.html" => SendFile("hello.html", "text/html; charset=utf-8"),
+                "/groot.gif" => SendFile("groot.gif", "image/gif"),
+                _ => NotFoundError()
+            };
         }
 
         private static byte[] NotFoundError()
@@ -190,18 +178,16 @@ namespace Sockets
             return CreateResponseBytes(head, body);
         }
 
-        private static byte[] HelloHtml()
+        private static byte[] SendFile(string fileName, string type)
         {
-            var body = File.ReadAllBytes("hello.html");
-            var head = new StringBuilder(
-                $@"HTTP/1.1 200 OK
-                    Content-Type: text/html; charset=utf-8
-                    Content-Length:{body.Length}
-
-                    ");
-            return CreateResponseBytes(head, body);
+            var bytes = File.ReadAllBytes(fileName);
+            var head = new StringBuilder();
+            head.Append("HTTP/1.1 200 OK\r\n");
+            head.Append($"Content-Type: {type}\r\n");
+            head.Append($"Content-Length:{bytes.Length}\r\n\r\n");
+            return CreateResponseBytes(head, bytes);
         }
-
+        
         // Собирает ответ в виде массива байт из байтов строки head и байтов body.
         private static byte[] CreateResponseBytes(StringBuilder head, byte[] body)
         {
