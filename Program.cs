@@ -207,7 +207,7 @@ namespace Sockets
                     else
                     {
                         name ??= "Default_Name";
-                        greeting ??= "Default_Greeting";ы
+                        greeting ??= "Default_Greeting";
                     }
                     
                     var s = Encoding.UTF8.GetString(body)
