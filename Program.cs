@@ -49,6 +49,7 @@ namespace Sockets
                 Console.WriteLine(">>> Can't find IPv4 address for host");
                 return;
             }
+
             // По выбранному IP-адресу будем слушать listeningPort.
             IPEndPoint ipEndPoint = new IPEndPoint(ipV4Address, listeningPort);
 
@@ -98,7 +99,7 @@ namespace Sockets
             connectionEstablished.Set();
 
             // Получаем сокет к клиенту, с которым установлено соединение.
-            Socket connectionSocket = (Socket)asyncResult.AsyncState;
+            Socket connectionSocket = (Socket) asyncResult.AsyncState;
             Socket clientSocket = connectionSocket.EndAccept(asyncResult);
 
             // Принимаем данные от клиента.
@@ -119,7 +120,7 @@ namespace Sockets
         private static void ReceiveCallback(IAsyncResult asyncResult)
         {
             // Достаем клиентский сокет из параметра callback.
-            ReceivingState receivingState = (ReceivingState)asyncResult.AsyncState;
+            ReceivingState receivingState = (ReceivingState) asyncResult.AsyncState;
             Socket clientSocket = receivingState.ClientSocket;
 
             // Читаем данные из клиентского сокета.
@@ -145,7 +146,8 @@ namespace Sockets
                 {
                     // Все данные были получены от клиента.
                     // Для удобства выведем их на консоль.
-                    Console.WriteLine($">>> Received {receivedBytes.Length} bytes from {clientSocket.RemoteEndPoint}. Data:\n" +
+                    Console.WriteLine(
+                        $">>> Received {receivedBytes.Length} bytes from {clientSocket.RemoteEndPoint}. Data:\n" +
                         Encoding.ASCII.GetString(receivedBytes));
 
                     // Сформируем ответ.
@@ -159,9 +161,69 @@ namespace Sockets
 
         private static byte[] ProcessRequest(Request request)
         {
-            // TODO
-            var head = new StringBuilder("OK");
-            var body = new byte[0];
+            var head = new StringBuilder();
+            var body = Array.Empty<byte>();
+
+            var requestUriSplit = request.RequestUri.Split("?");
+            var address = requestUriSplit[0];
+            NameValueCollection queryString = null;
+            if (requestUriSplit.Length > 1)
+                queryString = HttpUtility.ParseQueryString(requestUriSplit[1]);
+
+            if (address is "/" or "/hello.html")
+            {
+                var helloHtml = File.ReadAllText("hello.html");
+
+                var name = "{{World}}";
+                var cookie = request.Headers.FirstOrDefault(x => x.Name == "Cookie");
+                if (cookie != null)
+                    name = HttpUtility.UrlDecode(cookie.Value.Split("name_cookie=")[1]);
+
+                if (queryString != null)
+                {
+                    var greeting = HttpUtility.HtmlEncode(queryString["greeting"] ?? "{{Hello}}");
+                    name = HttpUtility.HtmlEncode(queryString["name"] ?? name);
+                    helloHtml = helloHtml.Replace("{{Hello}}", greeting);
+                }
+                
+                helloHtml = helloHtml.Replace("{{World}}", name);
+
+                body = Encoding.UTF8.GetBytes(helloHtml);
+
+
+                head.Append("HTTP/1.1 200 OK\r\n");
+                head.Append("Content-Type: text/html; charset=utf-8\r\n");
+
+                if (name != "{{World}}" && !name.Contains("name_cookie"))
+                {
+                    name = HttpUtility.UrlEncode(name);
+                    head.Append($"Set-Cookie: name_cookie={name}\r\n");
+                }
+            }
+            else if (address == "/groot.gif")
+            {
+                body = File.ReadAllBytes("groot.gif");
+
+                head.Append("HTTP/1.1 200 OK\r\n");
+                head.Append("Content-Type: image/gif; charset=utf-8\r\n");
+            }
+            else if (address == "/time.html")
+            {
+                var timeHtml = File.ReadAllText("time.template.html").Replace("{{ServerTime}}", $"{DateTime.Now}");
+                body = Encoding.UTF8.GetBytes(timeHtml);
+
+                head.Append("HTTP/1.1 200 OK\r\n");
+                head.Append("Content-Type: text/html; charset=utf-8\r\n");
+            }
+            else
+            {
+                head.Append("HTTP/1.1 404 Not Found\r\n");
+            }
+
+            head.Append($"Content-Length: {body.Length}\r\n");
+            head.Append("\r\n");
+
+
             return CreateResponseBytes(head, body);
         }
 
@@ -188,7 +250,7 @@ namespace Sockets
         private static void SendCallback(IAsyncResult asyncResult)
         {
             // Достаем клиентский сокет из параметра callback.
-            Socket clientSocket = (Socket)asyncResult.AsyncState;
+            Socket clientSocket = (Socket) asyncResult.AsyncState;
             try
             {
                 // Завершаем отправку данных клиенту.
