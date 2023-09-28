@@ -1,296 +1,292 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
+using System.Globalization;
+using System.IO;
 using System.Linq;
+using System.Net;
+using System.Net.Sockets;
 using System.Text;
-using FluentAssertions;
-using NUnit.Framework;
+using System.Threading;
+using System.Web;
 
 namespace Sockets
 {
-    public class Request
+    class Program
     {
-        public const string HttpLineSeparator = "\r\n";
-
-        public string Method;
-        public string RequestUri;
-        public string HttpVersion;
-        public List<Header> Headers;
-        public byte[] MessageBody;
-
-        public class Header
+        static void Main(string[] args)
         {
-            public Header(string name, string value)
-            {
-                Name = name;
-                Value = value;
-            }
-
-            public readonly string Name;
-            public readonly string Value;
-        }
-
-        // Структура http-запроса: https://www.w3.org/Protocols/rfc2616/rfc2616-sec5.html
-        public static Request StupidParse(byte[] requestBytes)
-        {
-            string requestString = Encoding.ASCII.GetString(requestBytes);
-
-            RequestLine requestLine = ParseRequestLine(requestString, out int readCharsCount);
-
-            List<Header> headers = ParseHeaders(requestString, ref readCharsCount);
-            if (headers == null)
-                return null;
-
-            int readBytesCount = Encoding.ASCII.GetBytes(requestString.Substring(0, readCharsCount)).Length;
-            byte[] messageBody = ParseMessageBody(requestBytes, headers, readBytesCount);
-            if (messageBody == null)
-                return null;
-
-            return new Request
-            {
-                Method = requestLine.Method,
-                RequestUri = requestLine.RequestUri,
-                HttpVersion = requestLine.HttpVersion,
-                Headers = headers,
-                MessageBody = messageBody
-            };
-        }
-
-        private static RequestLine ParseRequestLine(string requestString, out int readCharsCount)
-        {
-            readCharsCount = 0;
-            int lineEnd = requestString.IndexOf(HttpLineSeparator, StringComparison.InvariantCulture);
-            if (lineEnd < 0)
-                return null;
-
-            readCharsCount = lineEnd + 2;
-            string requestLineString = requestString.Substring(0, lineEnd);
-            string[] requestLineParts = requestLineString.Split(' ');
-            return new RequestLine(requestLineParts[0], requestLineParts[1], requestLineParts[2]);
-        }
-
-        private static List<Header> ParseHeaders(string requestString, ref int readCharsCount)
-        {
-            int lineStart = readCharsCount;
-
-            List<Header> headers = new List<Header>();
-            while (true)
-            {
-                if (lineStart >= requestString.Length)
-                    return null;
-                int lineEnd = requestString.IndexOf(HttpLineSeparator, lineStart, StringComparison.InvariantCulture);
-                if (lineEnd < 0)
-                    return null;
-                if (lineStart == lineEnd)
-                    break;
-
-                string headerString = requestString.Substring(lineStart, lineEnd - lineStart);
-                string[] headerParts = headerString.Split(':');
-                headers.Add(new Header(headerParts[0].Trim(), headerParts[1].Trim()));
-
-                lineStart = lineEnd + HttpLineSeparator.Length;
-            }
-
-            readCharsCount = lineStart + HttpLineSeparator.Length;
-            return headers;
-        }
-
-        private static byte[] ParseMessageBody(byte[] requestBytes, List<Header> headers, int readBytesCount)
-        {
-            int? contentLength = FindContentLength(headers);
-            int messageBodyLength = contentLength.HasValue ? contentLength.Value : requestBytes.Length - readBytesCount;
-            if (messageBodyLength > requestBytes.Length - readBytesCount)
-                return null;
-
-            byte[] messageBody = new byte[messageBodyLength];
-            Array.Copy(requestBytes, readBytesCount, messageBody, 0, messageBody.Length);
-            return messageBody;
-        }
-
-        private static int? FindContentLength(List<Header> headers)
-        {
-            Header contentLengthHeader = headers.FirstOrDefault(
-                h => string.Equals(h.Name, "Content-Length", StringComparison.InvariantCultureIgnoreCase));
-            return contentLengthHeader != null ? (int?)int.Parse(contentLengthHeader.Value) : null;
-        }
-
-        private class RequestLine
-        {
-            public RequestLine(string method, string requestUri, string httpVersion)
-            {
-                Method = method;
-                RequestUri = requestUri;
-                HttpVersion = httpVersion;
-            }
-
-            public readonly string Method;
-            public readonly string RequestUri;
-            public readonly string HttpVersion;
+            AsynchronousSocketListener.StartListening();
         }
     }
 
-    [TestFixture]
-    public class RequestSpecification
+    public class AsynchronousSocketListener
     {
-        private const string RequestLine = "GET /users/1 HTTP/1.1\r\n";
-        private const string Header1 = "UnknownHeader1: Value1\r\n";
-        private const string Header2 = "UnknownHeader2: Value2\r\n";
-        private const string Separator = "\r\n";
+        private const int listeningPort = 11000;
+        private static ManualResetEvent connectionEstablished = new ManualResetEvent(false);
 
-        private Request.Header requestHeader1;
-        private Request.Header requestHeader2;
-
-        private Request CreateRequest()
+        private class ReceivingState
         {
-            return new Request
+            public Socket ClientSocket;
+            public const int BufferSize = 1024;
+            public readonly byte[] Buffer = new byte[BufferSize];
+            public readonly List<byte> ReceivedData = new List<byte>();
+        }
+
+        public static void StartListening()
+        {
+            // Определяем IP-адрес, по которому будем принимать сообщения.
+            // Для этого сначала получаем DNS-имя компьютера,
+            // а из всех адресов выбираем первый попавшийся IPv4 адрес.
+            string hostName = Dns.GetHostName();
+            IPHostEntry ipHostEntry = Dns.GetHostEntry(hostName);
+            IPAddress ipV4Address = ipHostEntry.AddressList
+                .Where(address => address.AddressFamily == AddressFamily.InterNetwork)
+                .OrderBy(address => address.ToString())
+                .FirstOrDefault();
+            if (ipV4Address == null)
             {
-                Method = "GET",
-                HttpVersion = "HTTP/1.1",
-                RequestUri = "/users/1",
-                Headers = new List<Request.Header>(),
-                MessageBody = new byte[0]
-            };
+                Console.WriteLine(">>> Can't find IPv4 address for host");
+                return;
+            }
+
+            // По выбранному IP-адресу будем слушать listeningPort.
+            IPEndPoint ipEndPoint = new IPEndPoint(ipV4Address, listeningPort);
+
+            // Создаем TCP/IP сокет для приема соединений.
+            Socket connectionSocket = new Socket(ipV4Address.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+
+            try
+            {
+                // Присоединяем сокет к выбранной конечной точке (IP-адресу и порту).
+                connectionSocket.Bind(ipEndPoint);
+                // Начинаем слушать, в очереди на установку соединений не более 100 клиентов.
+                connectionSocket.Listen(100);
+
+                // Принимаем входящие соединения.
+                while (true)
+                    Accept(connectionSocket);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(">>> Got exception:");
+                Console.WriteLine(e.ToString());
+                Console.WriteLine(">>> ");
+            }
         }
 
-        [SetUp]
-        public void SetUp()
+        private static void Accept(Socket connectionSocket)
         {
-            requestHeader1 = new Request.Header("UnknownHeader1", "Value1");
-            requestHeader2 = new Request.Header("UnknownHeader2", "Value2");
+            // Сбрасываем состояние события установки соединения: теперь оно "не произошло".
+            // Это событие используется для синхронизации потоков.
+            connectionEstablished.Reset();
+
+            // Начинаем слушать асинхронно, ожидая входящих соединений.
+            // Вторым параметром передаем объект, который будет передан в callback.
+            connectionSocket.BeginAccept(AcceptCallback, connectionSocket);
+            Console.WriteLine($">>> Waiting for a connection to http://{connectionSocket.LocalEndPoint}");
+
+            // Поток, в котором начали слушать connectionSocket будет ждать,
+            // пока кто-нибудь не установит событие connectionEstablished.
+            // Это произойдет в AcceptCallback, когда соединение будет установлено.
+            connectionEstablished.WaitOne();
         }
 
-        [Test]
-        public void Parse_ShouldReturnNull_WhenEmptyInput()
+        private static void AcceptCallback(IAsyncResult asyncResult)
         {
-            var actual = Request.StupidParse(Encoding.ASCII.GetBytes(""));
-            actual.Should().BeNull();
+            // Соединение установлено, сигнализируем основному потоку,
+            // чтобы он продолжил принимать соединения.
+            connectionEstablished.Set();
+
+            // Получаем сокет к клиенту, с которым установлено соединение.
+            Socket connectionSocket = (Socket) asyncResult.AsyncState;
+            Socket clientSocket = connectionSocket.EndAccept(asyncResult);
+
+            // Принимаем данные от клиента.
+            Receive(clientSocket);
         }
 
-        [Test]
-        public void Parse_ShouldSucceed_WhenOnlyRequestLine()
+        private static void Receive(Socket clientSocket)
         {
-            var expected = CreateRequest();
-            var actual = Request.StupidParse(Encoding.ASCII.GetBytes(RequestLine + Separator));
-            actual.Should().BeEquivalentTo(expected);
+            // Создаем объект для callback.
+            ReceivingState receivingState = new ReceivingState();
+            receivingState.ClientSocket = clientSocket;
+            // Начинаем асинхронно получать данные от клиента.
+            // Передаем буфер, куда будут складываться полученные байты.
+            clientSocket.BeginReceive(receivingState.Buffer, 0, ReceivingState.BufferSize, SocketFlags.None,
+                ReceiveCallback, receivingState);
         }
 
-        [Test]
-        public void Parse_ShouldReturnNull_WhenNotFinishedRequestLine()
+        private static void ReceiveCallback(IAsyncResult asyncResult)
         {
-            var actual = Request.StupidParse(Encoding.ASCII.GetBytes("GET http://host/users/1 HTTP/1.1"));
-            actual.Should().BeNull();
+            // Достаем клиентский сокет из параметра callback.
+            ReceivingState receivingState = (ReceivingState) asyncResult.AsyncState;
+            Socket clientSocket = receivingState.ClientSocket;
+
+            // Читаем данные из клиентского сокета.
+            int bytesReceived = clientSocket.EndReceive(asyncResult);
+
+            if (bytesReceived > 0)
+            {
+                // В буфер могли поместиться не все данные.
+                // Все данные от клиента складываем в другой буфер - ReceivedData.
+                receivingState.ReceivedData.AddRange(receivingState.Buffer.Take(bytesReceived));
+
+                // Пытаемся распарсить Request из полученных данных.
+                byte[] receivedBytes = receivingState.ReceivedData.ToArray();
+                Request request = Request.StupidParse(receivedBytes);
+                if (request == null)
+                {
+                    // request не распарсился, значит получили не все данные.
+                    // Запрашиваем еще.
+                    clientSocket.BeginReceive(receivingState.Buffer, 0, ReceivingState.BufferSize, SocketFlags.None,
+                        ReceiveCallback, receivingState);
+                }
+                else
+                {
+                    // Все данные были получены от клиента.
+                    // Для удобства выведем их на консоль.
+                    Console.WriteLine(
+                        $">>> Received {receivedBytes.Length} bytes from {clientSocket.RemoteEndPoint}. Data:\n" +
+                        Encoding.ASCII.GetString(receivedBytes));
+
+                    // Сформируем ответ.
+                    byte[] responseBytes = ProcessRequest(request);
+
+                    // Отправим ответ клиенту.
+                    Send(clientSocket, responseBytes);
+                }
+            }
         }
 
-        [Test]
-        public void Parse_ShouldReturnNull_WhenRequestLineWithoutSeparator()
+        private static byte[] ProcessRequest(Request request)
         {
-            var actual = Request.StupidParse(Encoding.ASCII.GetBytes(RequestLine));
-            actual.Should().BeNull();
+            // TODO
+            var notFound = "HTTP/1.1 404 Not Found\r\n\r\n";
+            var head = new StringBuilder(notFound);
+            var body = new byte[0];
+            var query = request.RequestUri.Split("?");
+            if (query[0] is "/" or "/hello.html")
+            {
+                body = File.ReadAllBytes("hello.html");
+                var contentType = "text/html";
+                var userName = "World";
+                var userGreeting = "Hello";
+                var stringBody = Encoding.UTF8.GetString(body).Replace("{{Hello}}", userGreeting).Replace("{{World}}", userName);
+                body = Encoding.UTF8.GetBytes(stringBody);
+                {
+                    var collection = new NameValueCollection();
+                    if (query.Length > 1)
+                    {
+                        collection = HttpUtility.ParseQueryString(query[1]);
+                    }
+                    var name = collection["name"];
+                    var greeting = collection["greeting"];
+                    var cookies = request.Headers.FirstOrDefault(x => x.Name is "Cookie")?.Value.Split(";").Select(x => x.Trim().Split("="));
+                    if (name is not null)
+                    {
+                        var encodedName = HttpUtility.HtmlEncode(name);
+                        var replace = Encoding.UTF8.GetString(body).Replace("World", encodedName);
+                        body = Encoding.UTF8.GetBytes(replace);
+                    }
+                    else
+                    {
+                        name = cookies?.FirstOrDefault(x => x[0] == "name")?[1];
+                        var encodedName = HttpUtility.HtmlEncode(name);
+                        var replace = Encoding.UTF8.GetString(body).Replace("World", encodedName);
+                        body = Encoding.UTF8.GetBytes(replace);
+                    }
+
+                    if (greeting is not null)
+                    {
+                        var encodedGreeting = HttpUtility.HtmlEncode(greeting);
+                        var replace = Encoding.UTF8.GetString(body).Replace("Hello", encodedGreeting);
+                        body = Encoding.UTF8.GetBytes(replace);
+                    }
+                    else
+                    {
+                        greeting = cookies?.FirstOrDefault(x => x[0] == "greeting")?[1];
+                        var encodedGreeting = HttpUtility.HtmlEncode(greeting);
+                        var replace = Encoding.UTF8.GetString(body).Replace("Hello", encodedGreeting);
+                        body = Encoding.UTF8.GetBytes(replace);
+                    }
+
+                    userGreeting = greeting;
+                    userName = name;
+                }
+                
+                var contentLength = body.Length;
+                var ok =
+                    $"HTTP/1.1 200 OK\r\nContent-Type: {contentType}; charset=utf-8\r\nContent-Length: {contentLength}\r\nSet-Cookie: name={userName}\r\nSet-Cookie: greeting={userGreeting}\r\n\r\n";
+                head = new StringBuilder(ok);
+            }
+            else if (request.RequestUri is "/groot.gif")
+            {
+                var contentType = "img/gif";
+                body = File.ReadAllBytes("groot.gif");
+                var contentLength = body.Length;
+                var ok =
+                    $"HTTP/1.1 200 OK\r\nContent-Type: {contentType}; charset=utf-8\r\nContent-Length: {contentLength}\r\n\r\n";
+                head = new StringBuilder(ok);
+            }
+
+            else if (request.RequestUri is "/time.html")
+            {
+                body = File.ReadAllBytes("time.template.html");
+                var bodyString = Encoding.UTF8.GetString(body);
+                var replaceBody = bodyString.Replace("{{ServerTime}}", DateTime.Now.ToString());
+                body = Encoding.UTF8.GetBytes(replaceBody);
+                var contentLength = body.Length;
+                var contentType = "text/html";
+                var ok =
+                    $"HTTP/1.1 200 OK\r\nContent-Type: {contentType}; charset=utf-8\r\nContent-Length: {contentLength}\r\n\r\n";
+                head = new StringBuilder(ok);
+            }
+
+            return CreateResponseBytes(head, body);
         }
 
-        [Test]
-        public void Parse_ShouldSucceed_WhenRequestLineAndSingleHeader()
+        // Собирает ответ в виде массива байт из байтов строки head и байтов body.
+        private static byte[] CreateResponseBytes(StringBuilder head, byte[] body)
         {
-            var input = RequestLine + Header1 + Separator;
-            var expected = CreateRequest();
-            expected.Headers.Add(requestHeader1);
-
-            var actual = Request.StupidParse(Encoding.ASCII.GetBytes(input));
-            actual.Should().BeEquivalentTo(expected);
+            byte[] headBytes = Encoding.ASCII.GetBytes(head.ToString());
+            byte[] responseBytes = new byte[headBytes.Length + body.Length];
+            Array.Copy(headBytes, responseBytes, headBytes.Length);
+            Array.Copy(body, 0,
+                responseBytes, headBytes.Length,
+                body.Length);
+            return responseBytes;
         }
 
-        [Test]
-        public void Parse_ShouldSucceed_WhenRequestLineAndHeaders()
+        private static void Send(Socket clientSocket, byte[] responseBytes)
         {
-            var input = RequestLine + Header1 + Header2 + Separator;
-            var expected = CreateRequest();
-            expected.Headers.Add(requestHeader1);
-            expected.Headers.Add(requestHeader2);
-
-            var actual = Request.StupidParse(Encoding.ASCII.GetBytes(input));
-            actual.Should().BeEquivalentTo(expected);
+            Console.WriteLine(">>> Sending {0} bytes to client socket.", responseBytes.Length);
+            // Начинаем асинхронно отправлять данные клиенту.
+            clientSocket.BeginSend(responseBytes, 0, responseBytes.Length, SocketFlags.None,
+                SendCallback, clientSocket);
         }
 
-        [Test]
-        public void Parse_ShouldReturnNull_WhenNotFinishedHeader()
+        private static void SendCallback(IAsyncResult asyncResult)
         {
-            var input = RequestLine + "UnknownHeader1: Value1";
+            // Достаем клиентский сокет из параметра callback.
+            Socket clientSocket = (Socket) asyncResult.AsyncState;
+            try
+            {
+                // Завершаем отправку данных клиенту.
+                int bytesSent = clientSocket.EndSend(asyncResult);
+                Console.WriteLine(">>> Sent {0} bytes to client.", bytesSent);
 
-            var actual = Request.StupidParse(Encoding.ASCII.GetBytes(input));
-            actual.Should().BeNull();
-        }
-
-        [Test]
-        public void Parse_ShouldReturnNull_WhenHeadersWithoutSeparator()
-        {
-            var input = RequestLine + Header1 + Header2;
-
-            var actual = Request.StupidParse(Encoding.ASCII.GetBytes(input));
-            actual.Should().BeNull();
-        }
-
-        [Test]
-        public void Parse_ShouldSucceed_WhenBodyWithoutContentLength()
-        {
-            var input = RequestLine + Header1 + Header2 + Separator + "just text body";
-            var expected = CreateRequest();
-            expected.Headers.Add(requestHeader1);
-            expected.Headers.Add(requestHeader2);
-            expected.MessageBody = Encoding.ASCII.GetBytes("just text body");
-
-            var actual = Request.StupidParse(Encoding.ASCII.GetBytes(input));
-            actual.Should().BeEquivalentTo(expected);
-        }
-
-        [Test]
-        public void Parse_ShouldSucceed_WhenBodyWithContentLength()
-        {
-            var input = RequestLine +
-                        Header1 +
-                        Header2 +
-                        "Content-Length: 14\r\n" +
-                        Separator +
-                        "just text body";
-            var expected = CreateRequest();
-            expected.Headers.Add(requestHeader1);
-            expected.Headers.Add(requestHeader2);
-            expected.Headers.Add(new Request.Header("Content-Length", "14"));
-            expected.MessageBody = Encoding.ASCII.GetBytes("just text body");
-
-            var actual = Request.StupidParse(Encoding.ASCII.GetBytes(input));
-            actual.Should().BeEquivalentTo(expected);
-        }
-
-        [Test]
-        public void Parse_ShouldTrimBody_WhenContentLengthLessThanBody()
-        {
-            var input = RequestLine +
-                        Header1 +
-                        Header2 +
-                        "Content-Length: 10\r\n" +
-                        Separator +
-                        "just text body";
-            var expected = CreateRequest();
-            expected.Headers.Add(requestHeader1);
-            expected.Headers.Add(requestHeader2);
-            expected.Headers.Add(new Request.Header("Content-Length", "10"));
-            expected.MessageBody = Encoding.ASCII.GetBytes("just text ");
-
-            var actual = Request.StupidParse(Encoding.ASCII.GetBytes(input));
-            actual.Should().BeEquivalentTo(expected);
-        }
-
-        [Test]
-        public void Parse_ShouldReturnNull_WhenContentLengthMoreThanBody()
-        {
-            var input = RequestLine +
-                        Header1 +
-                        Header2 +
-                        "Content-Length: 15\r\n" +
-                        Separator +
-                        "just text body";
-
-            var actual = Request.StupidParse(Encoding.ASCII.GetBytes(input));
-            actual.Should().BeNull();
+                // Закрываем соединение.
+                clientSocket.Shutdown(SocketShutdown.Both);
+                clientSocket.Close();
+                Console.WriteLine(">>> ");
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(">>> Got exception:");
+                Console.WriteLine(e.ToString());
+                Console.WriteLine(">>> ");
+            }
         }
     }
 }
