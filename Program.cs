@@ -169,6 +169,14 @@ namespace Sockets
                 body = File.ReadAllBytes("hello.html");
                 head.Append($"Content-Length: {body.Length}\r\n\r\n");
             }
+
+            else if (path is "/groot.gif")
+            {
+                head = new StringBuilder("HTTP/1.1 200 OK\r\n");
+                head.Append("Content-Type: image/gif; charset=utf-8\r\n");
+                body = File.ReadAllBytes("groot.gif");
+                head.Append($"Content-Length: {body.Length}\r\n\r\n");
+            }
             
             return CreateResponseBytes(head, body);
         }
