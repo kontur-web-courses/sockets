@@ -166,6 +166,14 @@ namespace Sockets
             return sb;
         }
 
+        private static string GetContentType(params string[] types)
+        {
+            var sb = new StringBuilder("Content-Type: ");
+            foreach (var type in string.Join("; ", types))
+                sb.Append(type);
+            return sb.ToString();
+        }
+
         private static string OkHeader => "HTTP/1.1 200 OK";
         private static string ErrorHeader => "HTTP/1.1 404 Not Found";
 
@@ -178,7 +186,7 @@ namespace Sockets
             {
                 case "/" or "/hello.html":
                     body = File.ReadAllBytes("hello.html");
-                    head = CreateHeader(OkHeader, "Content-Type: text/html; charset=utf-8", $"Content-Length: {body.Length}");
+                    head = CreateHeader(OkHeader, GetContentType("text/html", "charset=utf-8"), $"Content-Length: {body.Length}");
                     break;
             }
             return CreateResponseBytes(head, body);
