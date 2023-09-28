@@ -169,20 +169,47 @@ namespace Sockets
             {
                 case "/" or "/hello.html":
                     var bodyStr = Encoding.UTF8.GetString(File.ReadAllBytes("hello.html"));
+                    head = new StringBuilder("HTTP/1.1 200 OK\r\n");
                     if (arr.Length > 1)
                     {
                         var nameValueCollection = HttpUtility.ParseQueryString(arr[1]);
-                        Console.WriteLine(nameValueCollection["name"]);
                         if (nameValueCollection["name"] is not null)
+                        {
                             bodyStr = bodyStr.Replace("{{World}}",
                                 HttpUtility.HtmlEncode(nameValueCollection["name"]));
+                            head.Append(
+                                $"Set-Cookie: name={HttpUtility.HtmlEncode(HttpUtility.UrlEncode(nameValueCollection["name"]))}\r\n");
+                        }
+
                         if (nameValueCollection["greeting"] is not null)
                             bodyStr = bodyStr.Replace("{{Hello}}",
                                 HttpUtility.HtmlEncode(nameValueCollection["greeting"]));
                     }
+                    else if (arr.Length == 1 || HttpUtility.ParseQueryString(arr[1])["name"] is null)
+                    {
+                        var headers = request.Headers;
+                        string cookies = null;
+                        foreach (var header in headers)
+                        {
+                            if (header.Name == "Cookie")
+                            {
+                                cookies = header.Value;
+                                break;
+                            }
+                        }
+
+                        if (cookies is not null)
+                        {
+                            bodyStr = cookies.Split(';')
+                                .Where(cookie => cookie.Contains("name"))
+                                .Aggregate(bodyStr,
+                                    (current, cookie) => current.Replace("{{World}}",
+                                        HttpUtility.UrlDecode(cookie.Split('=')[1])));
+                        }
+                    }
 
                     body = Encoding.UTF8.GetBytes(bodyStr);
-                    head = new StringBuilder("HTTP/1.1 200 OK\r\n");
+
                     head.Append("Content-Type: text/html; charset=utf-8\r\n");
                     head.Append($"Content-Length: {body.Length}\r\n\r\n");
                     break;
