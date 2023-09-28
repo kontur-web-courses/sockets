@@ -161,22 +161,41 @@ namespace Sockets
         {
             var head = new StringBuilder();
             var body = new byte[0];
+            
+            var requestUriSplit = request.RequestUri.Split('?');
+            var path = requestUriSplit[0];
+            var parameters = 
+                requestUriSplit.Length > 1 ? 
+                HttpUtility.ParseQueryString(requestUriSplit[1]) : null;
 
-            if (request.RequestUri is "/" or "/hello.html")
+            if (path is "/" or "/hello.html")
             {
-                body = File.ReadAllBytes("/hello.html");
+                body = File.ReadAllBytes("hello.html");
+                
+                if (parameters is not null)
+                {
+                    var bodyString = Encoding.UTF8.GetString(body);
+
+                    if (parameters["name"] is not null)
+                        bodyString = bodyString.Replace("{{World}}", parameters["name"]);
+                    if (parameters["greeting"] is not null)
+                        bodyString = bodyString.Replace("{{Hello}}", parameters["greeting"]);
+                    
+                    body = Encoding.UTF8.GetBytes(bodyString);
+                }
+                
                 head.Append("HTTP/1.1 200 OK\r\n")
                     .Append($"Content-Length: {body.Length}")
                     .Append("Content-Type: text/html; charset=utf-8");
             }
-            else if (request.RequestUri is "/groot.gif")
+            else if (path is "/groot.gif")
             {
-                body = File.ReadAllBytes("/groot.gif");
+                body = File.ReadAllBytes("groot.gif");
                 head.Append("HTTP/1.1 200 OK\r\n")
                     .Append($"Content-Length: {body.Length}")
                     .Append("Content-Type: image/gif");
             }
-            else if (request.RequestUri is "/time.html")
+            else if (path is "/time.html")
             {
                 var template = Encoding.UTF8.GetString(
                     File.ReadAllBytes("time.template.html"));
