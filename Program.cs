@@ -185,6 +185,12 @@ namespace Sockets
                     body = File.ReadAllBytes("groot.gif");
                     type = "image/gif";
                     break;
+                case "/time.html":
+                    var rawBody = File.ReadAllBytes("time.template.html");
+                    var rawBodyString = Encoding.UTF8.GetString(rawBody).Replace("{{ServerTime}}", DateTime.Now.ToString());
+                    body = Encoding.UTF8.GetBytes(rawBodyString);
+                    type = "text/html";
+                    break;
             }
             if (body.Length != 0)
                 head = CreateHeader(OkHeader, $"Content-Type: {type}; charset=utf-8", $"Content-Length: {body.Length}");
