@@ -161,45 +161,64 @@ namespace Sockets
         {
             var head = new StringBuilder();
             var body = new byte[0];
+
+            var cookieHeader = request.Headers
+                .FirstOrDefault(header => header.Name == "Cookie");
+            
+            var cookie = cookieHeader is null 
+                ? new Dictionary<string, string>() 
+                : cookieHeader.Value.Split("; ")
+                    .Select(el => el.Split('='))
+                    .ToDictionary(el => el[0], el => el[1]);
             
             var requestUriSplit = request.RequestUri.Split('?');
             var path = requestUriSplit[0];
             var parameters = 
-                requestUriSplit.Length > 1 ? 
-                HttpUtility.ParseQueryString(requestUriSplit[1]) : null;
+                requestUriSplit.Length > 1 
+                    ? HttpUtility.ParseQueryString(requestUriSplit[1]) 
+                    : null;
 
             if (path is "/" or "/hello.html")
             {
                 body = File.ReadAllBytes("hello.html");
                 
+                var bodyString = Encoding.UTF8.GetString(body);
+
+                var name = cookie.TryGetValue("name", out var value) ? value : null;
+                var greeting = (string)null;
+                
                 if (parameters is not null)
                 {
-                    var bodyString = Encoding.UTF8.GetString(body);
-
-                    if (parameters["name"] is not null)
-                        bodyString = bodyString.Replace(
-                            "{{World}}", 
-                            HttpUtility.HtmlEncode(parameters["name"])
-                            );
-                    if (parameters["greeting"] is not null)
-                        bodyString = bodyString.Replace(
-                            "{{Hello}}", 
-                            HttpUtility.HtmlEncode(parameters["greeting"])
-                            );
-                    
-                    body = Encoding.UTF8.GetBytes(bodyString);
+                    name = parameters["name"];
+                    greeting = parameters["greeting"];
                 }
+
+                if (name is not null)
+                    bodyString = bodyString.Replace(
+                        "{{World}}",
+                        HttpUtility.HtmlEncode(name)
+                    );
+                
+                if (greeting is not null)
+                    bodyString = bodyString.Replace(
+                        "{{Hello}}",
+                        HttpUtility.HtmlEncode(greeting)
+                    );
+                
+                body = Encoding.UTF8.GetBytes(bodyString);
                 
                 head.Append("HTTP/1.1 200 OK\r\n")
-                    .Append($"Content-Length: {body.Length}")
-                    .Append("Content-Type: text/html; charset=utf-8");
+                    .Append($"Content-Length: {body.Length}\r\n")
+                    .Append("Content-Type: text/html; charset=utf-8\r\n");
+
+                if (name is not null) head.Append($"Set-Cookie: name={HttpUtility.UrlEncode(name)}\r\n");
             }
             else if (path is "/groot.gif")
             {
                 body = File.ReadAllBytes("groot.gif");
                 head.Append("HTTP/1.1 200 OK\r\n")
-                    .Append($"Content-Length: {body.Length}")
-                    .Append("Content-Type: image/gif");
+                    .Append($"Content-Length: {body.Length}\r\n")
+                    .Append("Content-Type: image/gif\r\n");
             }
             else if (path is "/time.html")
             {
@@ -214,16 +233,16 @@ namespace Sockets
                 body = Encoding.UTF8.GetBytes(template);
                 
                 head.Append("HTTP/1.1 200 OK\r\n")
-                    .Append($"Content-Length: {body.Length}")
-                    .Append("Content-Type: text/html; charset=utf-8");
+                    .Append($"Content-Length: {body.Length}\r\n")
+                    .Append("Content-Type: text/html; charset=utf-8\r\n");
             }
             else
             {
                 head.Append("HTTP/1.1 404 Not Found\r\n")
-                    .Append("Content-Length: 0");
+                    .Append("Content-Length: 0\r\n");
             }
 
-            head.Append("\r\n\r\n");
+            head.Append("\r\n");
             
             return CreateResponseBytes(head, body);
         }
