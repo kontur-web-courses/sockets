@@ -175,10 +175,22 @@ namespace Sockets
             var body = Array.Empty<byte>();
             var endpoint = request.RequestUri;
             var type = string.Empty;
-            switch (endpoint)
+
+            var splitted = endpoint.Split('?');
+            var query = HttpUtility.ParseQueryString(splitted.Length > 1 
+                ? splitted[1] 
+                : "name=DefaultName&greeting=DefaultGreeting");
+            
+            switch (endpoint.Split('?')[0])
             {
                 case "/" or "/hello.html":
                     body = File.ReadAllBytes("hello.html");
+                    var name = query["name"];
+                    var greeting = query["greeting"];
+                    var s = Encoding.UTF8.GetString(body)
+                        .Replace("{{World}}", name)
+                        .Replace("{{Hello}}", greeting);
+                    body = Encoding.UTF8.GetBytes(s);
                     type = "text/html";
                     break;
                 case "/groot.gif":
