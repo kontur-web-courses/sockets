@@ -41,14 +41,15 @@ namespace Sockets
             string hostName = Dns.GetHostName();
             IPHostEntry ipHostEntry = Dns.GetHostEntry(hostName);
             IPAddress ipV4Address = ipHostEntry.AddressList
-                .Where(address => address.AddressFamily == AddressFamily.InterNetwork)
-                .OrderBy(address => address.ToString())
-                .FirstOrDefault();
+                                               .Where(address => address.AddressFamily == AddressFamily.InterNetwork)
+                                               .OrderBy(address => address.ToString())
+                                               .FirstOrDefault();
             if (ipV4Address == null)
             {
                 Console.WriteLine(">>> Can't find IPv4 address for host");
                 return;
             }
+
             // По выбранному IP-адресу будем слушать listeningPort.
             IPEndPoint ipEndPoint = new IPEndPoint(ipV4Address, listeningPort);
 
@@ -98,7 +99,7 @@ namespace Sockets
             connectionEstablished.Set();
 
             // Получаем сокет к клиенту, с которым установлено соединение.
-            Socket connectionSocket = (Socket)asyncResult.AsyncState;
+            Socket connectionSocket = (Socket) asyncResult.AsyncState;
             Socket clientSocket = connectionSocket.EndAccept(asyncResult);
 
             // Принимаем данные от клиента.
@@ -119,7 +120,7 @@ namespace Sockets
         private static void ReceiveCallback(IAsyncResult asyncResult)
         {
             // Достаем клиентский сокет из параметра callback.
-            ReceivingState receivingState = (ReceivingState)asyncResult.AsyncState;
+            ReceivingState receivingState = (ReceivingState) asyncResult.AsyncState;
             Socket clientSocket = receivingState.ClientSocket;
 
             // Читаем данные из клиентского сокета.
@@ -145,7 +146,8 @@ namespace Sockets
                 {
                     // Все данные были получены от клиента.
                     // Для удобства выведем их на консоль.
-                    Console.WriteLine($">>> Received {receivedBytes.Length} bytes from {clientSocket.RemoteEndPoint}. Data:\n" +
+                    Console.WriteLine(
+                        $">>> Received {receivedBytes.Length} bytes from {clientSocket.RemoteEndPoint}. Data:\n" +
                         Encoding.ASCII.GetString(receivedBytes));
 
                     // Сформируем ответ.
@@ -159,6 +161,25 @@ namespace Sockets
 
         private static byte[] ProcessRequest(Request request)
         {
+            var currentUri = request.RequestUri;
+
+            if (currentUri is "/" or "/hello.html")
+            {
+                return HelloHtml();
+            }
+
+            if (currentUri is "/groot.gif")
+            {
+                var bytes = File.ReadAllBytes("groot.gif");
+                var head = new StringBuilder(
+                    $@"HTTP/1.1 200 OK
+                    Content-Type: image/gif
+                    Content-Length:{bytes.Length}
+
+                    ");
+                return CreateResponseBytes(head, bytes);
+            }
+
             return NotFoundError();
         }
 
@@ -168,7 +189,19 @@ namespace Sockets
             var body = Array.Empty<byte>();
             return CreateResponseBytes(head, body);
         }
-        
+
+        private static byte[] HelloHtml()
+        {
+            var body = File.ReadAllBytes("hello.html");
+            var head = new StringBuilder(
+                $@"HTTP/1.1 200 OK
+                    Content-Type: text/html; charset=utf-8
+                    Content-Length:{body.Length}
+
+                    ");
+            return CreateResponseBytes(head, body);
+        }
+
         // Собирает ответ в виде массива байт из байтов строки head и байтов body.
         private static byte[] CreateResponseBytes(StringBuilder head, byte[] body)
         {
@@ -192,7 +225,7 @@ namespace Sockets
         private static void SendCallback(IAsyncResult asyncResult)
         {
             // Достаем клиентский сокет из параметра callback.
-            Socket clientSocket = (Socket)asyncResult.AsyncState;
+            Socket clientSocket = (Socket) asyncResult.AsyncState;
             try
             {
                 // Завершаем отправку данных клиенту.
