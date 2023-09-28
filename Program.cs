@@ -174,9 +174,11 @@ namespace Sockets
                         var nameValueCollection = HttpUtility.ParseQueryString(arr[1]);
                         Console.WriteLine(nameValueCollection["name"]);
                         if (nameValueCollection["name"] is not null)
-                            bodyStr = bodyStr.Replace("{{World}}", nameValueCollection["name"]);
+                            bodyStr = bodyStr.Replace("{{World}}",
+                                HttpUtility.HtmlEncode(nameValueCollection["name"]));
                         if (nameValueCollection["greeting"] is not null)
-                            bodyStr = bodyStr.Replace("{{Hello}}", nameValueCollection["greeting"]);
+                            bodyStr = bodyStr.Replace("{{Hello}}",
+                                HttpUtility.HtmlEncode(nameValueCollection["greeting"]));
                     }
 
                     body = Encoding.UTF8.GetBytes(bodyStr);
