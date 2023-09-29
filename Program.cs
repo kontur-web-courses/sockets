@@ -159,10 +159,77 @@ namespace Sockets
 
         private static byte[] ProcessRequest(Request request)
         {
-            // TODO
-            var head = new StringBuilder("OK");
-            var body = new byte[0];
-            return CreateResponseBytes(head, body);
+            var head = HttpHeadBuilder.Ok();
+            var body = Array.Empty<byte>();
+            var requestUriSplit = request.RequestUri.Split("?");
+            var requestPath = requestUriSplit[0];
+            string template;
+            var name2Value = new Dictionary<string, string>();
+            switch (requestPath)
+            {
+                case "/" or "/hello.html":
+                    var queryParams = requestUriSplit.Length > 1 
+                        ? HttpUtility.ParseQueryString(requestUriSplit[1]) 
+                        : new NameValueCollection();
+                    template = File.ReadAllText("hello.html");
+                    var nameValue = queryParams["name"];
+                    if (nameValue is not null)
+                        head.AddHeader($"Set-Cookie: name={HttpUtility.UrlEncode(queryParams["name"])}");
+                    else
+                        nameValue = GetCookieValue(request.Headers, "name");
+                    
+                    if (nameValue is not null)
+                        name2Value["{{World}}"] = nameValue;
+                    if (queryParams["greeting"] is not null)
+                        name2Value["{{Hello}}"] = queryParams["greeting"];
+
+                    body = Encoding.UTF8.GetBytes(FillTemplate(template, name2Value));
+                    head.AddHeaders("Content-Type: text/html; charset=utf-8", $"Content-Length: {body.Length}");
+                    break;
+                case "/groot.gif":
+                    body = File.ReadAllBytes("groot.gif");
+                    head.AddHeaders("Content-Type: image/gif;", $"Content-Length: {body.Length}");
+                    break;
+                case "/time.html":
+                    template = File.ReadAllText("time.template.html");
+                    name2Value["{{ServerTime}}"] = DateTime.Now.ToString(CultureInfo.InvariantCulture);
+                    body = Encoding.UTF8.GetBytes(FillTemplate(template, name2Value));
+                    head.AddHeaders("Content-Type: text/html; charset=utf-8", $"Content-Length: {body.Length}");
+                    break;
+                default:
+                    head = HttpHeadBuilder.NotFound();
+                    break;
+            }
+            
+            return CreateResponseBytes(head.GetBuilder(), body);
+        }
+
+        private static string FillTemplate(string template, Dictionary<string, string> name2Value)
+        {
+            foreach (var (name, value) in name2Value)
+            {
+                template = template.Replace(name, HttpUtility.HtmlEncode(value));
+            }
+
+            return template;
+        }
+
+        private static string GetCookieValue(IEnumerable<Request.Header> headers, string key)
+        {
+            var cookie = headers.FirstOrDefault(h => h.Name == "Cookie")?.Value;
+            if (cookie == null) return null;
+            
+            var pairs = cookie.Split(";");
+            foreach (var pair in pairs)
+            {
+                var split = pair.Split("=");
+                var name = split[0].Trim();
+                var value = split[1];
+                if (name == key)
+                    return HttpUtility.UrlDecode(value);
+            }
+
+            return null;
         }
 
         // Собирает ответ в виде массива байт из байтов строки head и байтов body.
