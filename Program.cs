@@ -189,8 +189,8 @@ namespace Sockets
                 case "/" or "/hello.html":
                     body = File.ReadAllBytes("hello.html");
                     
-                    var name = HttpUtility.HtmlDecode(query["name"]);
-                    var greeting = HttpUtility.HtmlDecode(query["greeting"]);
+                    var name = HttpUtility.HtmlEncode(query["name"]);
+                    var greeting = HttpUtility.HtmlEncode(query["greeting"]);
                     
                     if (name is not null)
                         nameCookieSet = $"Set-Cookie: name={HttpUtility.UrlEncode(name)}";
