@@ -9,6 +9,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Web;
+using Sockets.utils;
 
 namespace Sockets
 {
@@ -157,94 +158,155 @@ namespace Sockets
             }
         }
 
-        private static byte[] ProcessRequest(Request request)
+        private static string GetBodyWithReplacedElements(string body, Dictionary<string, string> replacementPairs)
         {
-            var head = new StringBuilder();
-            var body = new byte[0];
+            foreach (var pair in replacementPairs)
+            {
+                if (pair.Value is not null)
+                {
+                    body = body.Replace(
+                        pair.Key,
+                        HttpUtility.HtmlEncode(pair.Value)
+                    );
+                }
+            }
 
-            var cookieHeader = request.Headers
+            return body;
+        }
+        
+        private static byte[] SendHelloHtml(NameValueCollection parameters, Dictionary<string, string> cookie)
+        {
+            var body = File.ReadAllBytes("hello.html");
+                
+            var bodyString = Encoding.UTF8.GetString(body);
+
+            var name = parameters["name"];
+            if (name is null && cookie.TryGetValue("name", out var value)) 
+                name = value;
+
+            var greeting = parameters["greeting"];
+
+            bodyString = GetBodyWithReplacedElements(bodyString, new Dictionary<string, string>
+            {
+                { "{{World}}", name },
+                { "{{Hello}}", greeting }
+            });
+                
+            body = Encoding.UTF8.GetBytes(bodyString);
+
+            var currentCookie = name is null
+                ? null
+                : new Dictionary<string, string> { { "name", name } };
+
+            var head = CreateSuccessHead(
+                body.Length,
+                "text/html; charset=utf-8",
+                currentCookie
+                );
+
+            return CreateResponseBytes(head, body);
+        }
+
+        private static StringBuilder CreateSuccessHead(int bodyLength, string contentType = null, 
+            Dictionary<string, string> cookie = null)
+        {
+            return new StringBuilder()
+                .Append("HTTP/1.1 200 OK\r\n")
+                .Append($"Content-Length: {bodyLength}\r\n")
+                .AppendIfNotNull(contentType ,$"Content-Type: {contentType}\r\n")
+                .AppendIfNotNull(cookie, ConvertDictionaryToSetCookie(cookie))
+                .Append("\r\n");
+        }
+
+        private static string ConvertDictionaryToSetCookie(Dictionary<string, string> cookie)
+        {
+            if (cookie is null) return string.Empty;
+            
+            var cookieArray = cookie
+                .Select(pair => $"{pair.Key}={HttpUtility.UrlEncode(pair.Value)}")
+                .ToArray();
+
+            return "Set-Cookie: " + string.Join("; ", cookieArray) + "\r\n";
+        }
+        
+        private static byte[] SendImage(string path)
+        {
+            var body = File.ReadAllBytes(path);
+            
+            var head = CreateSuccessHead(body.Length ,"image/gif");
+
+            return CreateResponseBytes(head, body);
+        }
+
+        private static byte[] SendTimeHtml()
+        {
+            var template = Encoding.UTF8.GetString(
+                File.ReadAllBytes("time.template.html")
+                );
+
+            template = template.Replace(
+                "{{ServerTime}}", 
+                DateTime.Now.ToString(CultureInfo.InvariantCulture)
+                );
+            
+            var body = Encoding.UTF8.GetBytes(template);
+
+            var head = CreateSuccessHead(
+                body.Length,
+                "text/html; charset=utf-8"
+                );
+            
+            return CreateResponseBytes(head, body);
+        }
+
+        private static byte[] SendNotFoundHtml()
+        {
+            var head = CreateSuccessHead(0);
+
+            return CreateResponseBytes(head, Array.Empty<byte>());
+        }
+
+        private static Dictionary<string, string> GetCookie(IEnumerable<Request.Header> headers)
+        {
+            var cookieHeader = headers
                 .FirstOrDefault(header => header.Name == "Cookie");
             
-            var cookie = cookieHeader is null 
+            return cookieHeader is null 
                 ? new Dictionary<string, string>() 
                 : cookieHeader.Value.Split("; ")
                     .Select(el => el.Split('='))
-                    .ToDictionary(el => el[0], el => el[1]);
+                    .ToDictionary(el => el[0], el => HttpUtility.UrlDecode(el[1]));
+        }
+
+        private static string GetPath(string uri)
+        {
+            return uri.Split("?")[0];
+        }
+
+        private static NameValueCollection GetParameters(string uri)
+        {
+            var uriSplit = uri.Split("?");
             
-            var requestUriSplit = request.RequestUri.Split('?');
-            var path = requestUriSplit[0];
-            var parameters = 
-                requestUriSplit.Length > 1 
-                    ? HttpUtility.ParseQueryString(requestUriSplit[1]) 
-                    : null;
-
-            if (path is "/" or "/hello.html")
-            {
-                body = File.ReadAllBytes("hello.html");
-                
-                var bodyString = Encoding.UTF8.GetString(body);
-
-                var name = cookie.TryGetValue("name", out var value) ? value : null;
-                var greeting = (string)null;
-                
-                if (parameters is not null)
-                {
-                    name = parameters["name"];
-                    greeting = parameters["greeting"];
-                }
-
-                if (name is not null)
-                    bodyString = bodyString.Replace(
-                        "{{World}}",
-                        HttpUtility.HtmlEncode(name)
-                    );
-                
-                if (greeting is not null)
-                    bodyString = bodyString.Replace(
-                        "{{Hello}}",
-                        HttpUtility.HtmlEncode(greeting)
-                    );
-                
-                body = Encoding.UTF8.GetBytes(bodyString);
-                
-                head.Append("HTTP/1.1 200 OK\r\n")
-                    .Append($"Content-Length: {body.Length}\r\n")
-                    .Append("Content-Type: text/html; charset=utf-8\r\n");
-
-                if (name is not null) head.Append($"Set-Cookie: name={HttpUtility.UrlEncode(name)}\r\n");
-            }
-            else if (path is "/groot.gif")
-            {
-                body = File.ReadAllBytes("groot.gif");
-                head.Append("HTTP/1.1 200 OK\r\n")
-                    .Append($"Content-Length: {body.Length}\r\n")
-                    .Append("Content-Type: image/gif\r\n");
-            }
-            else if (path is "/time.html")
-            {
-                var template = Encoding.UTF8.GetString(
-                    File.ReadAllBytes("time.template.html"));
-
-                template = template.Replace(
-                    "{{ServerTime}}", 
-                    DateTime.Now.ToString(CultureInfo.InvariantCulture)
-                    );
-                
-                body = Encoding.UTF8.GetBytes(template);
-                
-                head.Append("HTTP/1.1 200 OK\r\n")
-                    .Append($"Content-Length: {body.Length}\r\n")
-                    .Append("Content-Type: text/html; charset=utf-8\r\n");
-            }
-            else
-            {
-                head.Append("HTTP/1.1 404 Not Found\r\n")
-                    .Append("Content-Length: 0\r\n");
-            }
-
-            head.Append("\r\n");
+            return uriSplit.Length > 1 
+                ? HttpUtility.ParseQueryString(uriSplit[1]) 
+                : new NameValueCollection();
+        }
+        
+        private static byte[] ProcessRequest(Request request)
+        {
+            var uri = request.RequestUri;
             
-            return CreateResponseBytes(head, body);
+            var path = GetPath(uri);
+            var parameters = GetParameters(uri);
+            var cookie = GetCookie(request.Headers);
+
+            return path switch
+            {
+                "/" or "/hello.html" => SendHelloHtml(parameters, cookie),
+                "/groot.gif" => SendImage("groot.gif"),
+                "/time.html" => SendTimeHtml(),
+                _ => SendNotFoundHtml()
+            };
         }
 
         // Собирает ответ в виде массива байт из байтов строки head и байтов body.
