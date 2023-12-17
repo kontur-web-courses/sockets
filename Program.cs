@@ -157,12 +157,80 @@ namespace Sockets
             }
         }
 
+        private static StringBuilder CreateHeader(params string[] parameters)
+        {
+            var sb = new StringBuilder();
+            foreach (var s in parameters.Where(p => p is not null))
+                sb.Append(s + "\r\n");
+            sb.Append("\r\n");
+            return sb;
+        }
+
+        private static string OkHeader => "HTTP/1.1 200 OK";
+        private static string ErrorHeader => "HTTP/1.1 404 Not Found";
+
         private static byte[] ProcessRequest(Request request)
         {
-            // TODO
-            var head = new StringBuilder("OK");
-            var body = new byte[0];
+            var head = CreateHeader(ErrorHeader);
+            var body = Array.Empty<byte>();
+            var endpoint = request.RequestUri;
+            var type = string.Empty;
+
+            var splitted = endpoint.Split('?');
+            var query = HttpUtility.ParseQueryString(splitted.Length > 1 
+                ? splitted[1] 
+                : "");
+            
+            string nameCookieSet = null; 
+            string greetingCookieSet = null;
+
+            switch (endpoint.Split('?')[0])
+            {
+                case "/" or "/hello.html":
+                    body = File.ReadAllBytes("hello.html");
+                    
+                    var name = HttpUtility.HtmlEncode(query["name"]);
+                    var greeting = HttpUtility.HtmlEncode(query["greeting"]);
+                    
+                    if (name is not null)
+                        nameCookieSet = $"Set-Cookie: name={HttpUtility.UrlEncode(name)}";
+                    if (greeting is not null)
+                        greetingCookieSet = $"Set-Cookie: greeting={HttpUtility.UrlEncode(greeting)}";
+                    
+                    var cookies = request.Headers.Where(h => h.Name == "Cookie").Select(h => h.Value).FirstOrDefault()?.Split("; ");
+
+                    if (cookies is not null)
+                    {
+                        name ??= HttpUtility.UrlDecode(cookies.FirstOrDefault(c => c.Split('=')[0] == "name")?.Split('=')[1]);
+                        greeting ??= HttpUtility.UrlDecode(cookies.FirstOrDefault(c => c.Split('=')[0] == "greeting")?.Split('=')[1]);
+                    }
+                    else
+                    {
+                        name ??= "Default_Name";
+                        greeting ??= "Default_Greeting";
+                    }
+                    
+                    var s = Encoding.UTF8.GetString(body)
+                        .Replace("{{World}}", name)
+                        .Replace("{{Hello}}", greeting);
+                    body = Encoding.UTF8.GetBytes(s);
+                    type = "text/html";
+                    break;
+                case "/groot.gif":
+                    body = File.ReadAllBytes("groot.gif");
+                    type = "image/gif";
+                    break;
+                case "/time.html":
+                    var rawBody = File.ReadAllBytes("time.template.html");
+                    var rawBodyString = Encoding.UTF8.GetString(rawBody).Replace("{{ServerTime}}", DateTime.Now.ToString());
+                    body = Encoding.UTF8.GetBytes(rawBodyString);
+                    type = "text/html";
+                    break;
+            }
+            if (body.Length != 0)
+                head = CreateHeader(OkHeader, $"Content-Type: {type}; charset=utf-8", $"Content-Length: {body.Length}", nameCookieSet, greetingCookieSet);
             return CreateResponseBytes(head, body);
+
         }
 
         // Собирает ответ в виде массива байт из байтов строки head и байтов body.
