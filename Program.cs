@@ -160,9 +160,89 @@ namespace Sockets
         private static byte[] ProcessRequest(Request request)
         {
             // TODO
-            var head = new StringBuilder("OK");
+            var head = new StringBuilder("HTTP/1.1 404 Not Found\r\n");
             var body = new byte[0];
+            var requestSplit = request.RequestUri.Split("?");
+            switch (requestSplit[0])
+            {
+                case "/":
+                case "/hello.html":
+                    ProcessHello(request, out head, out body);
+                    break;
+                case "/groot.gif":
+                    ProcessGroot(request, out head, out body);
+                    break;
+                case "/time.html":
+                    ProcessTime(request, out head, out body);
+                    break;
+            }
+
             return CreateResponseBytes(head, body);
+        }
+
+        private static void ProcessHello(Request request, out StringBuilder head, out byte[] body)
+        {
+            head = new StringBuilder(
+                "HTTP/1.1 200 OK\r\n" +
+                "Content-Type: text/html; charset=utf-8\r\n");
+            var rawBody = File.ReadAllBytes("hello.html");
+
+            var cookie = request.Headers.Find(header => header.Name == "Cookie");
+            string userName = "World";
+
+            var requestSplit = request.RequestUri.Split("?");
+            if (cookie != null && cookie.Value.Contains("name"))
+            {
+                var cookieNameStart = cookie.Value.IndexOf("name=", StringComparison.Ordinal) + 5;
+                userName = HttpUtility.UrlDecode(cookie.Value.Substring(cookieNameStart));
+            }
+            if (requestSplit.Length > 1)
+            {
+                var parse = HttpUtility.ParseQueryString(requestSplit[1]);
+                if (parse["name"] != null)
+                {
+                    userName = parse["name"];
+                    var encodedUserName = HttpUtility.UrlEncode(userName);
+                    head.Append($"Set-Cookie: name={encodedUserName}\r\n");
+                }
+                if (parse["greeting"] != null)
+                {
+                    rawBody = Encoding.UTF8.GetBytes(
+                        Encoding.UTF8.GetString(rawBody).Replace(
+                            "{{Hello}}",
+                            HttpUtility.HtmlEncode(parse["greeting"]
+                            )
+                        )
+                    );
+                }
+            }
+            body = Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(rawBody).Replace("{{World}}", HttpUtility.HtmlEncode(userName)));
+            head.Append($"Content-Length: {rawBody.Length}\r\n");
+
+            head.Append("\r\n");
+        }
+
+        private static void ProcessGroot(Request request, out StringBuilder head, out byte[] body)
+        {
+            body = File.ReadAllBytes("groot.gif");
+            head = new StringBuilder(
+                "HTTP/1.1 200 OK\r\n" +
+                "Content-Type: image/gif; charset=utf-8\r\n" +
+                $"Content-Length: {body.Length}\r\n\r\n");
+        }
+
+        private static void ProcessTime(Request request, out StringBuilder head, out byte[] body)
+        {
+            var rawBody = File.ReadAllBytes("time.template.html");
+            var rawBodyString = Encoding.UTF8.GetString(rawBody);
+            var replacedTimeString = rawBodyString.Replace(
+                "{{ServerTime}}", DateTime.Now.ToString(CultureInfo.InvariantCulture)
+                );
+            head = new StringBuilder(
+                "HTTP/1.1 200 OK\r\n" +
+                "Content-Type: text/html; charset=utf-8\r\n" +
+                $"Content-Length: {rawBody.Length}\r\n\r\n");
+            body = Encoding.UTF8.GetBytes(replacedTimeString);
         }
 
         // Собирает ответ в виде массива байт из байтов строки head и байтов body.
