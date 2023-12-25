@@ -159,9 +159,93 @@ namespace Sockets
 
         private static byte[] ProcessRequest(Request request)
         {
-            // TODO
-            var head = new StringBuilder("OK");
+            if (request.RequestUri.Equals("/")
+                || request.RequestUri.Contains("/?")
+                || request.RequestUri.Contains("/hello.html"))
+            {
+                return CreateQueryResponse(request);
+            }
+            if (request.RequestUri.Equals("/groot.gif"))
+                return CreateGifResponse();
+            if (request.RequestUri.Equals("/time.html"))
+                return CreateTimeResponse();
+
+            var head = new StringBuilder("HTTP/1.1 404 Not Found");
             var body = new byte[0];
+            return CreateResponseBytes(head, body);
+        }
+
+        private static byte[] CreateQueryResponse(Request request)
+        {
+            var queryString = request.RequestUri.Split('?').Skip(1).FirstOrDefault();
+            var queries = HttpUtility.ParseQueryString(queryString ?? "");
+            var bytes = File.ReadAllBytes("hello.html");
+            var formatStringBody = Encoding.UTF8.GetString(bytes);
+            var name = queries["name"];
+            var cookiesHeader = request.Headers.Find(x => x.Name == "Cookie");
+
+            var head = new StringBuilder("HTTP/1.1 200 OK\r\n");
+
+            if (name != null)
+            {
+                head.Append($"Set-Cookie: name={HttpUtility.UrlEncode(HttpUtility.HtmlEncode(name))}\r\n");
+            }
+            else if (cookiesHeader != null)
+            {
+                var cookies = cookiesHeader.Value.Split("; ")
+                    .ToDictionary(x => x.Split('=').First(),
+                        x => x.Split('=').Skip(1).First());
+
+                if (cookies.TryGetValue("name", out var cookieName))
+                {
+                    name = HttpUtility.UrlDecode(cookieName);
+                }
+            }
+            
+            var stringBody = formatStringBody
+                .Replace("{{World}}", HttpUtility.HtmlEncode(name) ?? "{{World}}")
+                .Replace("{{Hello}}", HttpUtility.HtmlEncode(queries["greeting"]) ?? "{{Hello}}");
+            
+            var body = Encoding.UTF8.GetBytes(stringBody);
+            head.Append("Content-Type: text/html; charset=utf-8\r\n");
+            head.Append($"Content-Length: {body.Length}\r\n\r\n");
+
+            return CreateResponseBytes(head, body);
+        }
+
+        private static byte[] CreateTimeResponse()
+        {            
+            var bytes = File.ReadAllBytes("time.template.html");
+            var formatStringBody = Encoding.UTF8.GetString(bytes);
+            var stringBody = formatStringBody.Replace("{{ServerTime}}", DateTime.UtcNow.ToString(CultureInfo.InvariantCulture));
+            var body = Encoding.UTF8.GetBytes(stringBody);
+            
+            var head = new StringBuilder("HTTP/1.1 200 OK\r\n");
+            head.Append("Content-Type: text/html; charset=utf-8\r\n");
+            head.Append($"Content-Length: {body.Length}\r\n\r\n");
+
+            return CreateResponseBytes(head, body);
+        }
+
+        private static byte[] CreateGifResponse()
+        {
+            var body = File.ReadAllBytes("groot.gif");
+            
+            var head = new StringBuilder("HTTP/1.1 200 OK\r\n");
+            head.Append("Content-Type: image/gif; charset=utf-8\r\n");
+            head.Append($"Content-Length: {body.Length}\r\n\r\n");
+
+            return CreateResponseBytes(head, body);
+        }
+
+        private static byte[] CreateHelloResponse()
+        {
+            var body = File.ReadAllBytes("hello.html");
+            
+            var head = new StringBuilder("HTTP/1.1 200 OK\r\n");
+            head.Append("Content-Type: text/html; charset=utf-8\r\n");
+            head.Append($"Content-Length: {body.Length}\r\n\r\n");
+
             return CreateResponseBytes(head, body);
         }
 
